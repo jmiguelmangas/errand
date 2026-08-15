@@ -15,11 +15,12 @@ from __future__ import annotations
 import asyncio
 import traceback as traceback_module
 from collections.abc import Callable
-from contextlib import suppress
+from contextlib import AsyncExitStack, suppress
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
+from .di import resolve_dependencies
 from .models import Job, JobStatus
 from .retry import RetryPolicy
 from .store import JobStore
@@ -166,7 +167,7 @@ class Runner:
         await self._store.update(job)
 
         try:
-            result = await self._call(envelope.fn, envelope.args, envelope.kwargs)
+            result = await self._execute(envelope)
         except Exception as exc:
             await self._handle_failure(envelope, exc)
             return
@@ -175,6 +176,15 @@ class Runner:
         job.result_repr = str(result)[: self._result_repr_max]
         job.finished_at = _utcnow()
         await self._store.update(job)
+
+    @staticmethod
+    async def _execute(envelope: _Envelope) -> Any:
+        async with AsyncExitStack() as stack:
+            resolved = await resolve_dependencies(
+                envelope.fn, envelope.kwargs, stack, {}
+            )
+            call_kwargs = {**resolved, **envelope.kwargs}
+            return await Runner._call(envelope.fn, envelope.args, call_kwargs)
 
     @staticmethod
     async def _call(fn: TaskFunc, args: tuple[Any, ...], kwargs: dict[str, Any]) -> Any:
