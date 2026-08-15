@@ -28,9 +28,10 @@ engine still runs anywhere. Because FastAPI is user-supplied and only its most
 stable public surface is touched (`APIRouter`, the `.dependency` attribute on
 `Depends`), a FastAPI release won't leave `errand` stranded.
 
-> **Status: 0.1.1, published.** Job store, worker pool, status router,
-> retries with backoff, dependency injection, and scheduling are all
-> implemented, tested (100% coverage), and live on PyPI — see
+> **Status: 0.2.0, published.** Job store, worker pool, status router,
+> retries with backoff, dependency injection, scheduling, lifecycle hooks,
+> and bounded in-memory growth are all implemented, tested (100%
+> coverage), and live on PyPI — see
 > [`CHANGELOG.md`](https://github.com/jmiguelmangas/errand/blob/main/CHANGELOG.md).
 >
 > The PyPI name `errand` turned out to be taken by an unrelated, actively
