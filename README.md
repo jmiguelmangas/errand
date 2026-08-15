@@ -1,7 +1,7 @@
 # errand
 
 <p align="center">
-  <img src="./assets/logo.png" alt="errand logo" width="200">
+  <img src="https://raw.githubusercontent.com/jmiguelmangas/errand/main/assets/logo.png" alt="errand logo" width="200">
 </p>
 
 > Stateful background jobs — the missing middle ground between FastAPI's
@@ -21,10 +21,10 @@ engine still runs anywhere. Because FastAPI is user-supplied and only its most
 stable public surface is touched (`APIRouter`, the `.dependency` attribute on
 `Depends`), a FastAPI release won't leave `errand` stranded.
 
-> **Status: 0.1.0, feature-complete.** Job store, worker pool, status
-> router, retries with backoff, dependency injection, and scheduling are
-> all implemented, tested (100% coverage), and merged — see
-> [`CHANGELOG.md`](./CHANGELOG.md). **Not yet published to PyPI.**
+> **Status: 0.1.1, published.** Job store, worker pool, status router,
+> retries with backoff, dependency injection, and scheduling are all
+> implemented, tested (100% coverage), and live on PyPI — see
+> [`CHANGELOG.md`](https://github.com/jmiguelmangas/errand/blob/main/CHANGELOG.md).
 >
 > The PyPI name `errand` turned out to be taken by an unrelated, actively
 > maintained package, so this project publishes as **`errand-jobs`**
@@ -216,12 +216,14 @@ optional extra without changing any task code.
 
 ## Roadmap
 
-All of [`TASKS.md`](./TASKS.md)'s milestones (M0–M7) are implemented,
-tested, and merged — this is a complete 0.1.0, not a work in progress.
-`TASKS.md` is kept as the historical build plan; contributor and
-architecture notes live in [`DESIGN.md`](./DESIGN.md) and
-[`CLAUDE.md`](./CLAUDE.md); release notes are in
-[`CHANGELOG.md`](./CHANGELOG.md).
+All of [`TASKS.md`](https://github.com/jmiguelmangas/errand/blob/main/TASKS.md)'s
+milestones (M0–M7) are implemented, tested, and merged — this is a complete
+0.1.0, not a work in progress. `TASKS.md` is kept as the historical build
+plan; contributor and architecture notes live in
+[`DESIGN.md`](https://github.com/jmiguelmangas/errand/blob/main/DESIGN.md)
+and [`CLAUDE.md`](https://github.com/jmiguelmangas/errand/blob/main/CLAUDE.md);
+release notes are in
+[`CHANGELOG.md`](https://github.com/jmiguelmangas/errand/blob/main/CHANGELOG.md).
 
 Explicitly deferred past 0.1.0 (called out as such in `DESIGN.md`): a
 durable `JobStore` (Redis/Postgres — the interface is already the seam for
