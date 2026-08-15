@@ -56,4 +56,4 @@ jobs:
         run: uv run python -c "import fastapi" && exit 1 || true
 
       - name: Run engine tests
-        run: uv run pytest tests --ignore=tests/test_fastapi.py
+        run: uv run pytest tests --ignore-glob='tests/test_fastapi*.py'
