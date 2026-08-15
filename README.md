@@ -28,7 +28,7 @@ engine still runs anywhere. Because FastAPI is user-supplied and only its most
 stable public surface is touched (`APIRouter`, the `.dependency` attribute on
 `Depends`), a FastAPI release won't leave `errand` stranded.
 
-> **Status: 0.2.0, published.** Job store, worker pool, status router,
+> **Status: 0.2.1, published.** Job store, worker pool, status router,
 > retries with backoff, dependency injection, scheduling, lifecycle hooks,
 > and bounded in-memory growth are all implemented, tested (100%
 > coverage), and live on PyPI — see
@@ -165,9 +165,10 @@ def log_retry(job: Job) -> None:
 
 Each decorator can be used multiple times; every registered hook fires, in
 registration order, with an immutable snapshot of the job as of that exact
-transition. Hooks may be sync or async — keep them fast, they run inline on
-the event loop, not in a thread. A hook that raises is logged and doesn't
-affect the job or any other hook.
+transition. Hooks may be sync or async and run as detached background
+tasks — a slow or hanging hook can never hold a worker slot or delay the
+next job. A hook that raises is logged and doesn't affect the job or any
+other hook.
 
 ## Using errand with sync frameworks (Flask, Django)
 
@@ -241,6 +242,15 @@ The core ships with `InMemoryJobStore`. The `JobStore` interface is the single
 seam for durability — a Redis or Postgres store can be added later as an
 optional extra without changing any task code.
 
+One thing that's specific to `InMemoryJobStore`, not a universal guarantee:
+`enqueue()` returns a job that's already visible via `get_job()`/`list_jobs()`
+with no polling needed, because it can create the record synchronously. A
+store that needs real I/O to persist (a future Redis/Postgres store) can't
+offer that without blocking the event loop, so it falls back to creating the
+record asynchronously — a moment of eventual consistency right after
+`enqueue()` for that store, same as before this was fixed for the in-memory
+case.
+
 `InMemoryJobStore` keeps every job record until the process exits or
 something prunes it — unbounded growth in a long-running process. For that
 case, pass `prune_after` (seconds) to `Errand(...)` and it prunes terminal
@@ -257,18 +267,15 @@ usually doesn't need it.
 
 ## Roadmap
 
-All of [`TASKS.md`](https://github.com/jmiguelmangas/errand/blob/main/TASKS.md)'s
-milestones (M0–M7) are implemented, tested, and merged — this is a complete
-0.1.0, not a work in progress. `TASKS.md` is kept as the historical build
-plan; contributor and architecture notes live in
-[`DESIGN.md`](https://github.com/jmiguelmangas/errand/blob/main/DESIGN.md)
-and [`CLAUDE.md`](https://github.com/jmiguelmangas/errand/blob/main/CLAUDE.md);
-release notes are in
-[`CHANGELOG.md`](https://github.com/jmiguelmangas/errand/blob/main/CHANGELOG.md).
+The core feature set (job store, worker pool, status router, retries,
+dependency injection, scheduling, lifecycle hooks, bounded memory) is
+implemented, tested, and released — see
+[`CHANGELOG.md`](https://github.com/jmiguelmangas/errand/blob/main/CHANGELOG.md)
+for what shipped in each version.
 
-Explicitly deferred past 0.1.0 (called out as such in `DESIGN.md`): a
-durable `JobStore` (Redis/Postgres — the interface is already the seam for
-it), remote enqueue/cancel over HTTP, and jitter on retry backoff.
+Not yet built: a durable `JobStore` (Redis/Postgres — the interface is
+already the seam for it), remote enqueue/cancel over HTTP, and jitter on
+retry backoff.
 
 ## License
 
