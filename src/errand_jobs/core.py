@@ -17,7 +17,7 @@ from typing import Any, TypeVar, overload
 from .errors import UnknownTaskError
 from .models import Job, JobStatus
 from .retry import BackoffKind, RetryPolicy
-from .runner import Runner
+from .runner import HookRegistry, Runner, TaskHook
 from .scheduler import Scheduler
 from .store import InMemoryJobStore, JobStore
 
@@ -64,8 +64,12 @@ class Errand:
         self._default_retry = (
             default_retry if default_retry is not None else RetryPolicy()
         )
+        self._hooks = HookRegistry()
         self._runner = Runner(
-            self._store, max_workers=max_workers, result_repr_max=result_repr_max
+            self._store,
+            max_workers=max_workers,
+            result_repr_max=result_repr_max,
+            hooks=self._hooks,
         )
         self._shutdown_timeout = shutdown_timeout
         self._background: set[asyncio.Task[None]] = set()
@@ -257,6 +261,48 @@ class Errand:
     ) -> list[Job]:
         """List jobs newest-first, optionally filtered by ``status``."""
         return await self._store.list(status=status, limit=limit, offset=offset)
+
+    def on_success(self, fn: TaskHook) -> TaskHook:
+        """Register a hook that fires after a job reaches ``SUCCEEDED``.
+
+        Usable as a bare decorator (``@tasks.on_success``). Multiple hooks
+        may be registered; all fire, in registration order, each with a
+        snapshot of the job as of this transition (safe to store; it
+        won't change under you as the job's lifecycle continues). A hook
+        may be sync or async -- keep it fast, it runs inline on the event
+        loop, not in a thread. A hook that raises is logged (logger
+        ``"errand_jobs"``) and doesn't affect the job or other hooks.
+
+        Example::
+
+            @tasks.on_success
+            def log_success(job: Job) -> None:
+                print(f"{job.name} succeeded: {job.result_repr}")
+        """
+        self._hooks.on_success.append(fn)
+        return fn
+
+    def on_failure(self, fn: TaskHook) -> TaskHook:
+        """Register a hook that fires after a job reaches ``FAILED``.
+
+        Fires whether the job exhausted its retries or was cancelled
+        during shutdown. See :meth:`on_success` for the rest of the
+        contract (bare decorator, multiple hooks, sync/async, error
+        handling).
+        """
+        self._hooks.on_failure.append(fn)
+        return fn
+
+    def on_retry(self, fn: TaskHook) -> TaskHook:
+        """Register a hook that fires when a failed job is scheduled to retry.
+
+        Fires once per retry, after ``job.status`` is back to ``PENDING``
+        but before the backoff wait. See :meth:`on_success` for the rest
+        of the contract (bare decorator, multiple hooks, sync/async, error
+        handling).
+        """
+        self._hooks.on_retry.append(fn)
+        return fn
 
     @property
     def router(self) -> Any:

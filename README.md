@@ -142,6 +142,32 @@ async def heartbeat() -> None:
 
 Scheduled runs are tracked exactly like enqueued jobs.
 
+## Lifecycle hooks
+
+Get visibility into job outcomes without wrapping every task:
+
+```python
+@tasks.on_success
+def log_success(job: Job) -> None:
+    print(f"{job.name} succeeded: {job.result_repr}")
+
+
+@tasks.on_failure
+def alert_on_failure(job: Job) -> None:
+    print(f"{job.name} failed: {job.error}")
+
+
+@tasks.on_retry
+def log_retry(job: Job) -> None:
+    print(f"{job.name} retrying (attempt {job.attempts})")
+```
+
+Each decorator can be used multiple times; every registered hook fires, in
+registration order, with an immutable snapshot of the job as of that exact
+transition. Hooks may be sync or async — keep them fast, they run inline on
+the event loop, not in a thread. A hook that raises is logged and doesn't
+affect the job or any other hook.
+
 ## Using errand with sync frameworks (Flask, Django)
 
 FastAPI gets first-class treatment: pass `tasks.lifespan` to `FastAPI(...)`
