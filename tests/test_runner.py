@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from errand import Errand, InMemoryJobStore, JobStatus, UnknownTaskError
+from errand import Errand, InMemoryJobStore, JobStatus, RetryPolicy, UnknownTaskError
 from errand.models import Job
 from errand.runner import Runner
 
@@ -194,9 +194,9 @@ async def test_runner_fails_jobs_still_queued_on_shutdown() -> None:
 
     hogging_job = Job(name="hog")
     queued_job = Job(name="queued")
-    await runner.submit(hogging_job, hog, (), {})
+    await runner.submit(hogging_job, hog, (), {}, RetryPolicy())
     await asyncio.wait_for(started.wait(), timeout=1.0)
-    await runner.submit(queued_job, hog, (), {})
+    await runner.submit(queued_job, hog, (), {}, RetryPolicy())
 
     await runner.stop(drain=True, timeout=0.05)
 
@@ -207,6 +207,207 @@ async def test_runner_fails_jobs_still_queued_on_shutdown() -> None:
     assert hogging_result.status == JobStatus.FAILED
     assert queued_result.status == JobStatus.FAILED
     assert queued_result.error == "Cancelled during shutdown"
+
+
+async def test_task_fails_n_times_then_succeeds() -> None:
+    tasks = Errand()
+    await tasks.startup()
+    try:
+        attempts_made = 0
+
+        @tasks.task(max_retries=3, retry_backoff="fixed", base_delay=0.01)
+        def flaky() -> str:
+            nonlocal attempts_made
+            attempts_made += 1
+            if attempts_made <= 2:
+                raise RuntimeError(f"attempt {attempts_made} fails")
+            return "ok"
+
+        job = tasks.enqueue(flaky)
+        finished = await _wait_for_terminal(tasks, job.id, timeout=5.0)
+
+        assert finished.status == JobStatus.SUCCEEDED
+        assert finished.attempts == 3
+        assert finished.result_repr == "ok"
+        assert finished.max_retries == 3
+    finally:
+        await tasks.shutdown()
+
+
+async def test_task_always_fails_exhausts_retries() -> None:
+    tasks = Errand()
+    await tasks.startup()
+    try:
+
+        @tasks.task(max_retries=2, retry_backoff="fixed", base_delay=0.01)
+        def always_fails() -> None:
+            raise RuntimeError("nope")
+
+        job = tasks.enqueue(always_fails)
+        finished = await _wait_for_terminal(tasks, job.id, timeout=5.0)
+
+        assert finished.status == JobStatus.FAILED
+        assert finished.attempts == 3
+        assert finished.error == "RuntimeError: nope"
+    finally:
+        await tasks.shutdown()
+
+
+async def test_task_with_no_retry_kwargs_uses_engine_default() -> None:
+    tasks = Errand(
+        default_retry=RetryPolicy(max_retries=2, backoff="fixed", base_delay=0.01)
+    )
+    await tasks.startup()
+    try:
+        attempts_made = 0
+
+        @tasks.task
+        def flaky() -> str:
+            nonlocal attempts_made
+            attempts_made += 1
+            if attempts_made <= 1:
+                raise RuntimeError("first attempt fails")
+            return "ok"
+
+        job = tasks.enqueue(flaky)
+        finished = await _wait_for_terminal(tasks, job.id, timeout=5.0)
+
+        assert finished.status == JobStatus.SUCCEEDED
+        assert finished.attempts == 2
+        assert finished.max_retries == 2
+    finally:
+        await tasks.shutdown()
+
+
+async def test_task_retry_kwargs_override_engine_default() -> None:
+    tasks = Errand(default_retry=RetryPolicy(max_retries=5))
+    await tasks.startup()
+    try:
+
+        @tasks.task(max_retries=0)
+        def always_fails() -> None:
+            raise RuntimeError("nope")
+
+        job = tasks.enqueue(always_fails)
+        finished = await _wait_for_terminal(tasks, job.id, timeout=5.0)
+
+        assert finished.status == JobStatus.FAILED
+        assert finished.attempts == 1
+        assert finished.max_retries == 0
+    finally:
+        await tasks.shutdown()
+
+
+async def test_task_retry_kwargs_max_delay_only_override() -> None:
+    tasks = Errand(default_retry=RetryPolicy(max_retries=5))
+    await tasks.startup()
+    try:
+
+        @tasks.task(max_delay=5.0)
+        def always_fails() -> None:
+            raise RuntimeError("nope")
+
+        job = tasks.enqueue(always_fails)
+        finished = await _wait_for_terminal(tasks, job.id, timeout=5.0)
+
+        # max_delay alone overrides -> falls back to RetryPolicy's own
+        # max_retries default (0), not the engine's default_retry.
+        assert finished.status == JobStatus.FAILED
+        assert finished.attempts == 1
+        assert finished.max_retries == 0
+    finally:
+        await tasks.shutdown()
+
+
+async def test_shutdown_drains_job_waiting_to_retry() -> None:
+    store = InMemoryJobStore()
+    runner = Runner(store, max_workers=1)
+    await runner.start()
+
+    calls = 0
+
+    async def flaky() -> str:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RuntimeError("first try fails")
+        return "ok"
+
+    job = Job(name="flaky")
+    retry = RetryPolicy(max_retries=1, backoff="fixed", base_delay=0.05)
+    await runner.submit(job, flaky, (), {}, retry)
+
+    await asyncio.wait_for(_wait_until(lambda: calls >= 1), timeout=1.0)
+
+    await runner.stop(drain=True, timeout=1.0)
+
+    result = await store.get(job.id)
+    assert result is not None
+    assert result.status == JobStatus.SUCCEEDED
+    assert result.attempts == 2
+
+
+async def test_shutdown_timeout_fails_job_waiting_to_retry() -> None:
+    store = InMemoryJobStore()
+    runner = Runner(store, max_workers=1)
+    await runner.start()
+
+    async def always_fails() -> None:
+        raise RuntimeError("nope")
+
+    job = Job(name="always_fails")
+    retry = RetryPolicy(max_retries=3, backoff="fixed", base_delay=10.0)
+    await runner.submit(job, always_fails, (), {}, retry)
+
+    async def _first_attempt_recorded() -> bool:
+        current = await store.get(job.id)
+        return current is not None and current.attempts >= 1
+
+    await asyncio.wait_for(_wait_until(_first_attempt_recorded), timeout=1.0)
+
+    await runner.stop(drain=True, timeout=0.05)
+
+    result = await store.get(job.id)
+    assert result is not None
+    assert result.status == JobStatus.FAILED
+    assert result.error == "Cancelled during shutdown"
+
+
+async def test_stop_without_drain_cancels_pending_retry_timer() -> None:
+    store = InMemoryJobStore()
+    runner = Runner(store, max_workers=1)
+    await runner.start()
+
+    async def always_fails() -> None:
+        raise RuntimeError("nope")
+
+    job = Job(name="always_fails")
+    retry = RetryPolicy(max_retries=3, backoff="fixed", base_delay=10.0)
+    await runner.submit(job, always_fails, (), {}, retry)
+
+    async def _first_attempt_recorded() -> bool:
+        current = await store.get(job.id)
+        return current is not None and current.attempts >= 1
+
+    await asyncio.wait_for(_wait_until(_first_attempt_recorded), timeout=1.0)
+    assert runner._retry_timers
+
+    await runner.stop(drain=False)
+
+    result = await store.get(job.id)
+    assert result is not None
+    assert result.status == JobStatus.FAILED
+    assert result.error == "Cancelled during shutdown"
+
+
+async def _wait_until(predicate, *, interval: float = 0.005) -> None:
+    while True:
+        outcome = predicate()
+        if asyncio.iscoroutine(outcome):
+            outcome = await outcome
+        if outcome:
+            return
+        await asyncio.sleep(interval)
 
 
 async def test_custom_store_is_used() -> None:
