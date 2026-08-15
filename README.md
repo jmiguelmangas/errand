@@ -4,6 +4,13 @@
   <img src="https://raw.githubusercontent.com/jmiguelmangas/errand/main/assets/logo.png" alt="errand logo" width="200">
 </p>
 
+<p align="center">
+  <a href="https://pypi.org/project/errand-jobs/"><img src="https://img.shields.io/pypi/v/errand-jobs.svg" alt="PyPI version"></a>
+  <a href="https://pypi.org/project/errand-jobs/"><img src="https://img.shields.io/pypi/pyversions/errand-jobs.svg" alt="Supported Python versions"></a>
+  <a href="https://github.com/jmiguelmangas/errand/actions/workflows/ci.yml"><img src="https://github.com/jmiguelmangas/errand/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
+  <a href="https://github.com/jmiguelmangas/errand/blob/main/LICENSE"><img src="https://img.shields.io/pypi/l/errand-jobs.svg" alt="License"></a>
+</p>
+
 > Stateful background jobs — the missing middle ground between FastAPI's
 > `BackgroundTasks` and Celery. **A zero-dependency engine with an optional,
 > first-class FastAPI adapter.**
