@@ -1,11 +1,11 @@
-"""fastapi.Depends(...) must resolve identically to errand.Depends(...)."""
+"""fastapi.Depends(...) must resolve identically to errand_jobs.Depends(...)."""
 
 import asyncio
 
 from fastapi import Depends as FastAPIDepends
 
-from errand import Depends as ErrandDepends
-from errand import Errand, JobStatus
+from errand_jobs import Depends as ErrandDepends
+from errand_jobs import Errand, JobStatus
 
 
 async def _wait_for_terminal(tasks: Errand, job_id: str, *, timeout: float = 2.0):

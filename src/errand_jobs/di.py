@@ -5,7 +5,7 @@ dependency by duck typing: any default value with a ``.dependency``
 attribute matches, so this resolves both :class:`Depends` and
 ``fastapi.Depends(...)`` identically, without ever importing FastAPI.
 
-Not supported (raises :class:`~errand.errors.UnsupportedDependencyError`):
+Not supported (raises :class:`~errand_jobs.errors.UnsupportedDependencyError`):
 
 - Parameters annotated ``Request``, ``Response``, ``WebSocket``, or
   ``BackgroundTasks`` (matched by annotation name, again without

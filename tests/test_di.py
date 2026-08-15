@@ -1,6 +1,6 @@
 import asyncio
 
-from errand import Depends, Errand, JobStatus, UnsupportedDependencyError
+from errand_jobs import Depends, Errand, JobStatus, UnsupportedDependencyError
 
 
 async def _wait_for_terminal(tasks: Errand, job_id: str, *, timeout: float = 2.0):

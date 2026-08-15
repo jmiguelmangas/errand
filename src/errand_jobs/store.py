@@ -17,7 +17,7 @@ from .models import Job, JobStatus
 
 
 class JobStore(ABC):
-    """Abstract persistence interface for :class:`~errand.models.Job` records."""
+    """Abstract persistence interface for :class:`~errand_jobs.models.Job` records."""
 
     @abstractmethod
     async def create(self, job: Job) -> None:

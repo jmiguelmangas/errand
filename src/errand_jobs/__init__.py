@@ -1,9 +1,10 @@
 """errand — stateful, in-process background jobs.
 
-A zero-dependency engine for tracked background jobs with retries,
-scheduling, and dependency injection. FastAPI is an optional, lazily
-imported adapter (see :mod:`errand._fastapi`); importing :mod:`errand`
-never imports FastAPI.
+Import as ``errand_jobs`` (``pip install errand-jobs``). A zero-dependency
+engine for tracked background jobs with retries, scheduling, and
+dependency injection. FastAPI is an optional, lazily imported adapter (see
+:mod:`errand_jobs._fastapi`); importing :mod:`errand_jobs` never imports
+FastAPI.
 """
 
 from .core import Errand

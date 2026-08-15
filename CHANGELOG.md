@@ -23,11 +23,11 @@ Initial release.
   drain in-flight work gracefully on shutdown.
 - **Read-only FastAPI status router.** `Errand.router` — `GET /` (paginated,
   optional `?status=` filter) and `GET /{job_id}` (404 on unknown) — built
-  lazily so importing `errand` never imports FastAPI.
+  lazily so importing `errand_jobs` never imports FastAPI.
 - **Retries with backoff.** `RetryPolicy` (`none`/`fixed`/`exponential`,
   capped by `max_delay`), configurable per task or via
   `Errand(default_retry=...)`. Backoff waits never block a worker.
-- **Dependency injection in tasks.** `errand.Depends`, recognised by duck
+- **Dependency injection in tasks.** `errand_jobs.Depends`, recognised by duck
   typing (`.dependency` attribute) so `fastapi.Depends(...)` works
   identically with zero FastAPI import. Sync/async/generator/async-generator
   dependencies, nested dependencies, per-job caching, and `yield`-based
@@ -38,8 +38,11 @@ Initial release.
 
 ### Notes
 
-- The engine (`errand`, minus `errand._fastapi`) has zero runtime
+- Published on PyPI as `errand-jobs` (`pip install errand-jobs`); the
+  import name is `errand_jobs`. The PyPI name `errand` was already taken by
+  an unrelated package by the time of first publish.
+- The engine (`errand_jobs`, minus `errand_jobs._fastapi`) has zero runtime
   dependencies and works without FastAPI installed. FastAPI is an optional
-  extra (`pip install errand[fastapi]`) needed only for `Errand.router`.
+  extra (`pip install errand-jobs[fastapi]`) needed only for `Errand.router`.
 - 100% test coverage on every module; the engine test suite is verified to
   pass in an environment where FastAPI is not installed, in CI and locally.

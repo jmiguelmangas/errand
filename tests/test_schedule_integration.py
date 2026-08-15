@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from errand import Errand, JobStatus
+from errand_jobs import Errand, JobStatus
 
 
 async def _wait_until(

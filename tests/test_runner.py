@@ -2,9 +2,15 @@ import asyncio
 
 import pytest
 
-from errand import Errand, InMemoryJobStore, JobStatus, RetryPolicy, UnknownTaskError
-from errand.models import Job
-from errand.runner import Runner
+from errand_jobs import (
+    Errand,
+    InMemoryJobStore,
+    JobStatus,
+    RetryPolicy,
+    UnknownTaskError,
+)
+from errand_jobs.models import Job
+from errand_jobs.runner import Runner
 
 
 async def _wait_for_terminal(tasks: Errand, job_id: str, *, timeout: float = 2.0):

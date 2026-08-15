@@ -24,9 +24,12 @@ stable public surface is touched (`APIRouter`, the `.dependency` attribute on
 > **Status: 0.1.0, feature-complete.** Job store, worker pool, status
 > router, retries with backoff, dependency injection, and scheduling are
 > all implemented, tested (100% coverage), and merged — see
-> [`CHANGELOG.md`](./CHANGELOG.md). **Not yet published to PyPI.** Before
-> first publish, confirm the `errand` name is still free (only
-> `errand-boy`, an abandoned 2014 project, exists today) and register it.
+> [`CHANGELOG.md`](./CHANGELOG.md). **Not yet published to PyPI.**
+>
+> The PyPI name `errand` turned out to be taken by an unrelated, actively
+> maintained package, so this project publishes as **`errand-jobs`**
+> (`pip install errand-jobs`) while the import name stays `errand_jobs` —
+> the GitHub repo and project name remain `errand`.
 
 ## Why
 
@@ -53,20 +56,21 @@ apps actually have.
 ## Install
 
 ```bash
-pip install errand            # engine only, zero dependencies
-pip install "errand[fastapi]" # + the lifespan and status router
+pip install errand-jobs            # engine only, zero dependencies
+pip install "errand-jobs[fastapi]" # + the lifespan and status router
 # or
-uv add "errand[fastapi]"
+uv add "errand-jobs[fastapi]"
 ```
 
 Requires Python 3.10+. FastAPI is only needed for the adapter (the `.router`);
-the engine runs standalone.
+the engine runs standalone. The distribution is `errand-jobs`; the import
+name is `errand_jobs`.
 
 ## Quickstart
 
 ```python
 from fastapi import FastAPI
-from errand import Errand
+from errand_jobs import Errand
 
 tasks = Errand()                       # in-memory store, 4 workers
 app = FastAPI(lifespan=tasks.lifespan)   # starts/drains workers + scheduler
@@ -105,7 +109,7 @@ The same pattern you use in routes, teardown included:
 
 ```python
 from fastapi import Depends
-from errand import Errand
+from errand_jobs import Errand
 
 tasks = Errand()
 
@@ -151,7 +155,7 @@ from each view with `asyncio.run_coroutine_threadsafe(...)`:
 import asyncio
 import threading
 
-from errand import Errand
+from errand_jobs import Errand
 
 tasks = Errand()
 

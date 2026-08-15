@@ -1,7 +1,7 @@
 import asyncio
 from datetime import datetime, timedelta
 
-from errand.scheduler import Scheduler
+from errand_jobs.scheduler import Scheduler
 
 
 def test_interval_schedule_fires_expected_number_of_times_over_window() -> None:

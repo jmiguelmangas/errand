@@ -1,11 +1,17 @@
 [project]
-name = "errand"
+name = "errand-jobs"
 version = "0.1.0"
 description = "Stateful background jobs — a zero-dependency engine with an optional FastAPI adapter."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/jmiguelmangas/errand"
+Repository = "https://github.com/jmiguelmangas/errand"
+Issues = "https://github.com/jmiguelmangas/errand/issues"
+Changelog = "https://github.com/jmiguelmangas/errand/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 fastapi = ["fastapi>=0.100"]
@@ -25,7 +31,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/errand"]
+packages = ["src/errand_jobs"]
 
 [tool.ruff]
 line-length = 88
@@ -43,7 +49,7 @@ files = ["src"]
 asyncio_mode = "auto"
 
 [tool.coverage.run]
-source = ["errand"]
+source = ["errand_jobs"]
 
 [tool.coverage.report]
 fail_under = 90

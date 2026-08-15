@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from errand import InMemoryJobStore, Job, JobStatus
+from errand_jobs import InMemoryJobStore, Job, JobStatus
 
 
 @pytest.fixture

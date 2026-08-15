@@ -1,7 +1,7 @@
 """The Errand engine: task registration, enqueueing, and lifecycle.
 
 stdlib-only. FastAPI integration (:attr:`Errand.router`) is added by
-:mod:`errand._fastapi` and imported lazily from there — this module never
+:mod:`errand_jobs._fastapi` and imported lazily from there — this module never
 imports FastAPI.
 """
 
@@ -104,7 +104,7 @@ class Errand:
         none of the retry kwargs are given, the task uses the engine's
         ``default_retry`` policy; if any are given, they define this
         task's policy in full (unset fields fall back to
-        :class:`~errand.retry.RetryPolicy`'s own defaults, not the
+        :class:`~errand_jobs.retry.RetryPolicy`'s own defaults, not the
         engine's).
         """
 
@@ -224,7 +224,7 @@ class Errand:
         """Enqueue a registered task for background execution.
 
         Accepts either the decorated function or its registered name.
-        Returns immediately with a ``PENDING`` :class:`~errand.models.Job`;
+        Returns immediately with a ``PENDING`` :class:`~errand_jobs.models.Job`;
         persistence and execution are scheduled on the running event loop,
         so this must be called from within one (e.g. an async request
         handler). The job becomes visible via :meth:`get_job` shortly
@@ -257,7 +257,7 @@ class Errand:
     def router(self) -> Any:
         """A read-only FastAPI status router: ``GET /`` and ``GET /{job_id}``.
 
-        Built lazily on first access via :mod:`errand._fastapi`, the only
+        Built lazily on first access via :mod:`errand_jobs._fastapi`, the only
         module that imports FastAPI. Raises ``ImportError`` with an
         actionable message if FastAPI isn't installed.
 
