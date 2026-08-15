@@ -224,11 +224,11 @@ class Errand:
         """Enqueue a registered task for background execution.
 
         Accepts either the decorated function or its registered name.
-        Returns immediately with a ``PENDING`` :class:`~errand_jobs.models.Job`;
-        persistence and execution are scheduled on the running event loop,
-        so this must be called from within one (e.g. an async request
-        handler). The job becomes visible via :meth:`get_job` shortly
-        after this call returns.
+        Returns immediately with a ``PENDING`` :class:`~errand_jobs.models.Job`
+        that's already visible via :meth:`get_job`/:meth:`list_jobs` by the
+        time this call returns -- no polling needed. This must still be
+        called from within a running event loop (e.g. an async request
+        handler), since execution happens on it.
         """
         name = fn if isinstance(fn, str) else getattr(fn, _NAME_ATTR, None)
         if name is None or name not in self._registry:
@@ -236,11 +236,16 @@ class Errand:
 
         registration = self._registry[name]
         job = Job(name=name)
-        submission = asyncio.create_task(
-            self._runner.submit(job, registration.fn, args, kwargs, registration.retry)
-        )
-        self._background.add(submission)
-        submission.add_done_callback(self._background.discard)
+        if not self._runner.submit_sync(
+            job, registration.fn, args, kwargs, registration.retry
+        ):
+            submission = asyncio.create_task(
+                self._runner.submit(
+                    job, registration.fn, args, kwargs, registration.retry
+                )
+            )
+            self._background.add(submission)
+            submission.add_done_callback(self._background.discard)
         return job
 
     async def get_job(self, job_id: str) -> Job | None:

@@ -96,13 +96,6 @@ GET /jobs/{job_id}
    "attempts": 1, "created_at": "...", "started_at": "...", ...}
 ```
 
-> **Note:** `enqueue()` returns immediately with a `PENDING` job, but
-> persisting that record happens on the next tick of the event loop. If you
-> call `get_job()` (or hit the status endpoint) *immediately* afterward with
-> no `await` in between, you can get `None`/404 for an instant. Poll
-> tolerantly rather than asserting the record exists on the first check —
-> see the quickstart tests in the repo for the pattern.
-
 ## Dependency injection in tasks
 
 The same pattern you use in routes, teardown included:
