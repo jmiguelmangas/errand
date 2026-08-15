@@ -112,11 +112,46 @@ class Runner:
         kwargs: dict[str, Any],
         retry: RetryPolicy,
     ) -> None:
-        """Persist ``job`` as ``PENDING`` and queue it for a worker."""
+        """Persist ``job`` as ``PENDING`` and queue it for a worker.
+
+        Async fallback for stores whose :meth:`~errand_jobs.store.JobStore.create_sync`
+        can't create a record without blocking I/O; prefer :meth:`submit_sync`.
+        """
         job.max_retries = retry.max_retries
         await self._store.create(job)
-        envelope = _Envelope(job=job, fn=fn, args=args, kwargs=kwargs, retry=retry)
-        await self._queue.put(envelope)
+        self._queue.put_nowait(self._make_envelope(job, fn, args, kwargs, retry))
+
+    def submit_sync(
+        self,
+        job: Job,
+        fn: TaskFunc,
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+        retry: RetryPolicy,
+    ) -> bool:
+        """Try to persist and queue ``job`` entirely synchronously.
+
+        Returns ``True`` if the store could create the record without
+        blocking I/O (``job`` is then immediately visible via
+        :meth:`~errand_jobs.store.JobStore.get`/``list``, with no race
+        against a scheduled-but-not-yet-run :meth:`submit`), ``False`` if
+        the caller should fall back to :meth:`submit` instead.
+        """
+        job.max_retries = retry.max_retries
+        if not self._store.create_sync(job):
+            return False
+        self._queue.put_nowait(self._make_envelope(job, fn, args, kwargs, retry))
+        return True
+
+    @staticmethod
+    def _make_envelope(
+        job: Job,
+        fn: TaskFunc,
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+        retry: RetryPolicy,
+    ) -> _Envelope:
+        return _Envelope(job=job, fn=fn, args=args, kwargs=kwargs, retry=retry)
 
     async def _drain(self, timeout: float | None) -> None:
         with suppress(asyncio.TimeoutError):

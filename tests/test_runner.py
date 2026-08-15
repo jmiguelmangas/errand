@@ -432,3 +432,62 @@ async def test_custom_store_is_used() -> None:
         assert await store.get(job.id) is not None
     finally:
         await tasks.shutdown()
+
+
+async def test_get_job_immediately_after_enqueue_has_no_race() -> None:
+    tasks = Errand()
+    await tasks.startup()
+    try:
+
+        @tasks.task
+        def noop() -> None:
+            pass
+
+        # Run many times, no sleep/await between enqueue() and get_job(), to
+        # prove the record is always synchronously visible -- not just
+        # usually visible.
+        for _ in range(200):
+            job = tasks.enqueue(noop)
+            fetched = await tasks.get_job(job.id)
+            assert fetched is not None
+            assert fetched.id == job.id
+            assert fetched.name == "noop"
+    finally:
+        await tasks.shutdown()
+
+
+class _AsyncOnlyStore(InMemoryJobStore):
+    """A store that can't create synchronously, forcing the async fallback."""
+
+    def create_sync(self, job: Job) -> bool:
+        return False
+
+
+async def test_enqueue_falls_back_to_async_path_without_sync_create() -> None:
+    store = _AsyncOnlyStore()
+    tasks = Errand(store=store)
+    await tasks.startup()
+    try:
+
+        @tasks.task
+        def add(a: int, b: int) -> int:
+            return a + b
+
+        job = tasks.enqueue(add, 2, 3)
+        finished = await _wait_for_terminal(tasks, job.id)
+
+        assert finished.status == JobStatus.SUCCEEDED
+        assert finished.result_repr == "5"
+    finally:
+        await tasks.shutdown()
+
+
+async def test_runner_submit_sync_returns_false_without_sync_create() -> None:
+    store = _AsyncOnlyStore()
+    runner = Runner(store)
+
+    def noop() -> None:
+        pass
+
+    job = Job(name="noop")
+    assert runner.submit_sync(job, noop, (), {}, RetryPolicy()) is False

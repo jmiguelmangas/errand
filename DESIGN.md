@@ -87,6 +87,7 @@ The single seam for durability.
 ```python
 class JobStore(ABC):
     async def create(self, job: Job) -> None: ...
+    def create_sync(self, job: Job) -> bool: ...   # default: return False
     async def get(self, job_id: str) -> Job | None: ...
     async def update(self, job: Job) -> None: ...
     async def list(self, *, status: JobStatus | None = None,
@@ -97,6 +98,17 @@ class JobStore(ABC):
 `InMemoryJobStore`: a `dict[str, Job]` guarded by an `asyncio.Lock`. `list`
 returns newest-first. `prune` drops terminal jobs older than a cutoff. That's
 it — no threading concerns because everything runs on the event loop.
+
+`create_sync` exists so `Errand.enqueue()` (a plain, non-async method) can
+make the job's `PENDING` record immediately visible via `get`/`list` before
+it returns, instead of scheduling `create` as a task and returning before
+that task has run — which left a real, if brief, window where an
+immediately-following `get_job()` returned `None`. `InMemoryJobStore`
+overrides it (plain dict write, no lock needed — it can't suspend
+mid-write, so nothing else can interleave). The default implementation
+returns `False`; a store that can only persist via real I/O (a future
+`RedisJobStore` / `SqlJobStore`) doesn't override it and `enqueue()` falls
+back to scheduling `create` as before for that store.
 
 A future `RedisJobStore` / `SqlJobStore` implements the same ABC as an optional
 extra. **The core never imports them.**
