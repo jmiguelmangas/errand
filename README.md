@@ -84,6 +84,13 @@ GET /jobs/{job_id}
    "attempts": 1, "created_at": "...", "started_at": "...", ...}
 ```
 
+> **Note:** `enqueue()` returns immediately with a `PENDING` job, but
+> persisting that record happens on the next tick of the event loop. If you
+> call `get_job()` (or hit the status endpoint) *immediately* afterward with
+> no `await` in between, you can get `None`/404 for an instant. Poll
+> tolerantly rather than asserting the record exists on the first check —
+> see the quickstart tests in the repo for the pattern.
+
 ## Dependency injection in tasks
 
 The same pattern you use in routes, teardown included:
@@ -122,6 +129,72 @@ async def heartbeat() -> None:
 ```
 
 Scheduled runs are tracked exactly like enqueued jobs.
+
+## Using errand with sync frameworks (Flask, Django)
+
+FastAPI gets first-class treatment: pass `tasks.lifespan` to `FastAPI(...)`
+and the worker pool starts and drains with the app, no glue code needed.
+Flask and Django are WSGI-based and don't own an event loop the way an ASGI
+app does, so `errand`'s `asyncio` engine needs a small bridge — run one
+event loop in a background thread for the app's lifetime, and hop onto it
+from each view with `asyncio.run_coroutine_threadsafe(...)`:
+
+```python
+import asyncio
+import threading
+
+from errand import Errand
+
+tasks = Errand()
+
+
+@tasks.task
+def resize_image(path: str) -> str:
+    ...  # slow work
+
+
+_loop = asyncio.new_event_loop()
+threading.Thread(target=_loop.run_forever, daemon=True).start()
+asyncio.run_coroutine_threadsafe(tasks.startup(), _loop).result()
+```
+
+`enqueue()` schedules an internal task on the *running* loop, so it must be
+called from a coroutine running on `_loop` — wrap it rather than calling
+`tasks.enqueue(...)` straight from the view:
+
+```python
+# Flask
+@app.post("/upload")
+def upload():
+    async def _enqueue():
+        return tasks.enqueue(resize_image, request.form["path"])
+
+    job = asyncio.run_coroutine_threadsafe(_enqueue(), _loop).result()
+    return {"job_id": job.id}
+```
+
+```python
+# Django
+def upload_view(request):
+    async def _enqueue():
+        return tasks.enqueue(resize_image, request.POST["path"])
+
+    job = asyncio.run_coroutine_threadsafe(_enqueue(), _loop).result()
+    return JsonResponse({"job_id": job.id})
+```
+
+`get_job()`/`list_jobs()` are already coroutines, so the same call works
+directly with no wrapper:
+
+```python
+job = asyncio.run_coroutine_threadsafe(tasks.get_job(job_id), _loop).result()
+```
+
+On process exit (e.g. via `atexit`), drain in-flight jobs the same way:
+
+```python
+asyncio.run_coroutine_threadsafe(tasks.shutdown(), _loop).result()
+```
 
 ## Backends
 
