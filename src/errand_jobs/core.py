@@ -298,9 +298,12 @@ class Errand:
         may be registered; all fire, in registration order, each with a
         snapshot of the job as of this transition (safe to store; it
         won't change under you as the job's lifecycle continues). A hook
-        may be sync or async -- keep it fast, it runs inline on the event
-        loop, not in a thread. A hook that raises is logged (logger
+        may be sync or async, and runs as a detached background task, not
+        awaited inline -- a slow or hanging hook can never hold a worker
+        slot or delay the next job. A hook that raises is logged (logger
         ``"errand_jobs"``) and doesn't affect the job or other hooks.
+        ``shutdown()`` gives outstanding hooks a grace period (the same
+        timeout used for draining jobs) before cancelling whatever's left.
 
         Example::
 
