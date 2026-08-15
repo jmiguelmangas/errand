@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from errand_jobs import InMemoryJobStore, Job, JobStatus
+from errand_jobs.store import JobStore
 
 
 @pytest.fixture
@@ -83,6 +84,38 @@ async def test_list_paginates(store: InMemoryJobStore) -> None:
     page = await store.list(limit=2, offset=1)
 
     assert [job.name for job in page] == ["job-1", "job-2"]
+
+
+def test_in_memory_store_create_sync_persists_immediately(
+    store: InMemoryJobStore,
+) -> None:
+    job = Job(name="ping")
+
+    assert store.create_sync(job) is True
+    assert job.id in store._jobs
+
+
+async def test_job_store_create_sync_default_returns_false() -> None:
+    class _MinimalStore(JobStore):
+        async def create(self, job: Job) -> None:
+            pass
+
+        async def get(self, job_id: str) -> Job | None:
+            return None
+
+        async def update(self, job: Job) -> None:
+            pass
+
+        async def list(
+            self, *, status: JobStatus | None = None, limit: int = 50, offset: int = 0
+        ) -> list[Job]:
+            return []
+
+        async def prune(self, older_than: datetime) -> int:
+            return 0
+
+    store = _MinimalStore()
+    assert store.create_sync(Job(name="ping")) is False
 
 
 async def test_prune_deletes_old_terminal_jobs(store: InMemoryJobStore) -> None:

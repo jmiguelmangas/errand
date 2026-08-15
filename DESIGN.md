@@ -87,6 +87,7 @@ The single seam for durability.
 ```python
 class JobStore(ABC):
     async def create(self, job: Job) -> None: ...
+    def create_sync(self, job: Job) -> bool: ...   # default: return False
     async def get(self, job_id: str) -> Job | None: ...
     async def update(self, job: Job) -> None: ...
     async def list(self, *, status: JobStatus | None = None,
@@ -97,6 +98,26 @@ class JobStore(ABC):
 `InMemoryJobStore`: a `dict[str, Job]` guarded by an `asyncio.Lock`. `list`
 returns newest-first. `prune` drops terminal jobs older than a cutoff. That's
 it — no threading concerns because everything runs on the event loop.
+Nothing calls `prune` on its own, though: pass `Errand(prune_after=...)`
+(seconds) and the engine calls it automatically on an internal interval
+schedule (reusing `scheduler.py`'s `Scheduler.add_interval`, registered
+under a private name a user schedule can never collide with, since
+schedule names aren't looked up anywhere) — capped at a 60s check
+interval, same reasoning as the scheduler's own max tick. Off by default;
+an unbounded in-memory store is fine for a short-lived process or one
+that's not accumulating millions of terminal jobs, and a durable store
+usually wants its own retention policy instead.
+
+`create_sync` exists so `Errand.enqueue()` (a plain, non-async method) can
+make the job's `PENDING` record immediately visible via `get`/`list` before
+it returns, instead of scheduling `create` as a task and returning before
+that task has run — which left a real, if brief, window where an
+immediately-following `get_job()` returned `None`. `InMemoryJobStore`
+overrides it (plain dict write, no lock needed — it can't suspend
+mid-write, so nothing else can interleave). The default implementation
+returns `False`; a store that can only persist via real I/O (a future
+`RedisJobStore` / `SqlJobStore`) doesn't override it and `enqueue()` falls
+back to scheduling `create` as before for that store.
 
 A future `RedisJobStore` / `SqlJobStore` implements the same ABC as an optional
 extra. **The core never imports them.**
@@ -214,7 +235,8 @@ avoids an obvious abuse surface).
 class Errand:
     def __init__(self, *, store: JobStore | None = None, max_workers: int = 4,
                  default_retry: RetryPolicy | None = None,
-                 result_repr_max: int = 500) -> None: ...
+                 result_repr_max: int = 500,
+                 prune_after: float | None = None) -> None: ...
 
     # registration
     def task(self, fn=None, *, name=None, max_retries=0,
@@ -227,6 +249,12 @@ class Errand:
 
     # inspection
     async def get_job(self, job_id: str) -> Job | None: ...
+    async def list_jobs(self, *, status=None, limit=50, offset=0) -> list[Job]: ...
+
+    # lifecycle hooks -- each fires with an immutable snapshot of the job
+    def on_success(self, fn: Callable[[Job], Any]) -> Callable[[Job], Any]: ...
+    def on_failure(self, fn: Callable[[Job], Any]) -> Callable[[Job], Any]: ...
+    def on_retry(self, fn: Callable[[Job], Any]) -> Callable[[Job], Any]: ...
 
     # FastAPI integration
     @property
@@ -240,6 +268,16 @@ class Errand:
 `task` and `schedule` work both bare (`@tasks.task`) and parameterised
 (`@tasks.task(max_retries=3)`). `enqueue` accepts either the decorated function
 or its registered name.
+
+`on_success`/`on_failure`/`on_retry` are bare decorators (`@tasks.on_success`);
+each can be registered multiple times, and every registered hook fires, in
+registration order, for its matching transition. A hook may be sync or async
+and receives an immutable snapshot of the `Job` at the moment of the
+transition (a `dataclasses.replace()` copy — not the live object the runner
+keeps mutating). A hook that raises is logged and does not affect the job or
+any other hook. This is the thin observability layer described in
+`NEXT_STEPS.md`'s post-0.1.1 hardening plan — no new runtime dependency,
+`logging` is stdlib.
 
 Composing with an existing lifespan (documented pattern):
 
@@ -302,6 +340,6 @@ files = ["src"]
 asyncio_mode = "auto"
 
 [tool.coverage.report]
-fail_under = 90
+fail_under = 100
 show_missing = true
 ```

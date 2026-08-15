@@ -7,16 +7,20 @@ job through ``RUNNING`` to a terminal status, and persists every
 transition to the :class:`~errand_jobs.store.JobStore`. On failure, the
 configured :class:`~errand_jobs.retry.RetryPolicy` decides whether to
 re-enqueue after a delay or mark the job ``FAILED``; the delay is a
-separate timer task so a retry wait never blocks a worker.
+separate timer task so a retry wait never blocks a worker. Every
+terminal/retry transition also fires the matching hooks in
+:class:`HookRegistry`, registered via
+:meth:`~errand_jobs.core.Errand.on_success`/``on_failure``/``on_retry``.
 """
 
 from __future__ import annotations
 
 import asyncio
+import logging
 import traceback as traceback_module
 from collections.abc import Callable
 from contextlib import AsyncExitStack, suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from typing import Any
 
@@ -26,13 +30,29 @@ from .retry import RetryPolicy
 from .store import JobStore
 
 TaskFunc = Callable[..., Any]
+TaskHook = Callable[[Job], Any]
 
 _TRACEBACK_MAX_CHARS = 4000
 _SHUTDOWN_ERROR = "Cancelled during shutdown"
+_LOGGER = logging.getLogger("errand_jobs")
 
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+@dataclass
+class HookRegistry:
+    """Lifecycle hooks fired on job state transitions.
+
+    Populated by :meth:`~errand_jobs.core.Errand.on_success`/``on_failure``/
+    ``on_retry`` and shared by reference with the :class:`Runner` that
+    fires them -- registering a hook after construction still works.
+    """
+
+    on_success: list[TaskHook] = field(default_factory=list)
+    on_failure: list[TaskHook] = field(default_factory=list)
+    on_retry: list[TaskHook] = field(default_factory=list)
 
 
 @dataclass
@@ -66,10 +86,12 @@ class Runner:
         *,
         max_workers: int = 4,
         result_repr_max: int = 500,
+        hooks: HookRegistry | None = None,
     ) -> None:
         self._store = store
         self._max_workers = max_workers
         self._result_repr_max = result_repr_max
+        self._hooks = hooks if hooks is not None else HookRegistry()
         self._queue: asyncio.Queue[_Envelope] = asyncio.Queue()
         self._workers: list[asyncio.Task[None]] = []
         self._retry_timers: set[asyncio.Task[None]] = set()
@@ -112,11 +134,46 @@ class Runner:
         kwargs: dict[str, Any],
         retry: RetryPolicy,
     ) -> None:
-        """Persist ``job`` as ``PENDING`` and queue it for a worker."""
+        """Persist ``job`` as ``PENDING`` and queue it for a worker.
+
+        Async fallback for stores whose :meth:`~errand_jobs.store.JobStore.create_sync`
+        can't create a record without blocking I/O; prefer :meth:`submit_sync`.
+        """
         job.max_retries = retry.max_retries
         await self._store.create(job)
-        envelope = _Envelope(job=job, fn=fn, args=args, kwargs=kwargs, retry=retry)
-        await self._queue.put(envelope)
+        self._queue.put_nowait(self._make_envelope(job, fn, args, kwargs, retry))
+
+    def submit_sync(
+        self,
+        job: Job,
+        fn: TaskFunc,
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+        retry: RetryPolicy,
+    ) -> bool:
+        """Try to persist and queue ``job`` entirely synchronously.
+
+        Returns ``True`` if the store could create the record without
+        blocking I/O (``job`` is then immediately visible via
+        :meth:`~errand_jobs.store.JobStore.get`/``list``, with no race
+        against a scheduled-but-not-yet-run :meth:`submit`), ``False`` if
+        the caller should fall back to :meth:`submit` instead.
+        """
+        job.max_retries = retry.max_retries
+        if not self._store.create_sync(job):
+            return False
+        self._queue.put_nowait(self._make_envelope(job, fn, args, kwargs, retry))
+        return True
+
+    @staticmethod
+    def _make_envelope(
+        job: Job,
+        fn: TaskFunc,
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+        retry: RetryPolicy,
+    ) -> _Envelope:
+        return _Envelope(job=job, fn=fn, args=args, kwargs=kwargs, retry=retry)
 
     async def _drain(self, timeout: float | None) -> None:
         with suppress(asyncio.TimeoutError):
@@ -147,6 +204,30 @@ class Runner:
         job.error = _SHUTDOWN_ERROR
         job.finished_at = _utcnow()
         await self._store.update(job)
+        await self._fire_hooks(self._hooks.on_failure, job)
+
+    async def _fire_hooks(self, hooks: list[TaskHook], job: Job) -> None:
+        if not hooks:
+            return
+        # A snapshot, not the live envelope.job: that object keeps
+        # mutating (attempts, status, ...) as the job's lifecycle
+        # continues, and a hook that stores its argument (e.g. for later
+        # assertions or a log batch) must see the state as of *this*
+        # transition, not whatever it's become by the time it's read.
+        snapshot = replace(job)
+        for hook in hooks:
+            try:
+                if asyncio.iscoroutinefunction(hook):
+                    await hook(snapshot)
+                else:
+                    hook(snapshot)
+            except Exception:
+                _LOGGER.exception(
+                    "hook %r raised while handling job %s (%s)",
+                    hook,
+                    job.id,
+                    job.name,
+                )
 
     async def _worker_loop(self) -> None:
         while True:
@@ -176,6 +257,7 @@ class Runner:
         job.result_repr = str(result)[: self._result_repr_max]
         job.finished_at = _utcnow()
         await self._store.update(job)
+        await self._fire_hooks(self._hooks.on_success, job)
 
     @staticmethod
     async def _execute(envelope: _Envelope) -> Any:
@@ -201,12 +283,14 @@ class Runner:
         if job.attempts <= envelope.retry.max_retries:
             job.status = JobStatus.PENDING
             await self._store.update(job)
+            await self._fire_hooks(self._hooks.on_retry, job)
             self._schedule_retry(envelope, envelope.retry.delay_for(job.attempts))
             return
 
         job.status = JobStatus.FAILED
         job.finished_at = _utcnow()
         await self._store.update(job)
+        await self._fire_hooks(self._hooks.on_failure, job)
 
     def _schedule_retry(self, envelope: _Envelope, delay: float) -> None:
         timer = asyncio.create_task(self._retry_after_delay(envelope, delay))

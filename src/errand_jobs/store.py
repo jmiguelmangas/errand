@@ -23,6 +23,20 @@ class JobStore(ABC):
     async def create(self, job: Job) -> None:
         """Persist a new job record."""
 
+    def create_sync(self, job: Job) -> bool:
+        """Best-effort synchronous create; ``True`` if it persisted ``job``.
+
+        Lets a caller that isn't a coroutine (like
+        :meth:`~errand_jobs.core.Errand.enqueue`) make a job immediately
+        visible via :meth:`get`/:meth:`list`, with no race against a
+        scheduled-but-not-yet-run :meth:`create`. Returns ``False`` if this
+        store can't create a record without doing real (potentially
+        blocking) I/O -- callers then fall back to :meth:`create`. The
+        default implementation always returns ``False``; process-local
+        stores like :class:`InMemoryJobStore` should override it.
+        """
+        return False
+
     @abstractmethod
     async def get(self, job_id: str) -> Job | None:
         """Return the job with ``job_id``, or ``None`` if it doesn't exist."""
@@ -73,6 +87,12 @@ class InMemoryJobStore(JobStore):
     async def create(self, job: Job) -> None:
         async with self._lock:
             self._jobs[job.id] = replace(job)
+
+    def create_sync(self, job: Job) -> bool:
+        # Safe without the lock: plain dict assignment doesn't suspend, so
+        # nothing else can interleave mid-write on the single-threaded loop.
+        self._jobs[job.id] = replace(job)
+        return True
 
     async def get(self, job_id: str) -> Job | None:
         async with self._lock:

@@ -103,13 +103,13 @@ async def test_at_schedule_fires_once_as_tracked_job() -> None:
 def test_schedule_requires_exactly_one_of_cron_interval_at() -> None:
     tasks = Errand()
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="exactly one of"):
 
         @tasks.schedule()
         def no_trigger() -> None:
             pass
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="exactly one of"):
 
         @tasks.schedule(cron="* * * * *", interval_seconds=1.0)
         def two_triggers() -> None:

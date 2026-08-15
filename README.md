@@ -4,6 +4,13 @@
   <img src="https://raw.githubusercontent.com/jmiguelmangas/errand/main/assets/logo.png" alt="errand logo" width="200">
 </p>
 
+<p align="center">
+  <a href="https://pypi.org/project/errand-jobs/"><img src="https://img.shields.io/pypi/v/errand-jobs.svg" alt="PyPI version"></a>
+  <a href="https://pypi.org/project/errand-jobs/"><img src="https://img.shields.io/pypi/pyversions/errand-jobs.svg" alt="Supported Python versions"></a>
+  <a href="https://github.com/jmiguelmangas/errand/actions/workflows/ci.yml"><img src="https://github.com/jmiguelmangas/errand/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
+  <a href="https://github.com/jmiguelmangas/errand/blob/main/LICENSE"><img src="https://img.shields.io/pypi/l/errand-jobs.svg" alt="License"></a>
+</p>
+
 > Stateful background jobs — the missing middle ground between FastAPI's
 > `BackgroundTasks` and Celery. **A zero-dependency engine with an optional,
 > first-class FastAPI adapter.**
@@ -21,9 +28,10 @@ engine still runs anywhere. Because FastAPI is user-supplied and only its most
 stable public surface is touched (`APIRouter`, the `.dependency` attribute on
 `Depends`), a FastAPI release won't leave `errand` stranded.
 
-> **Status: 0.1.1, published.** Job store, worker pool, status router,
-> retries with backoff, dependency injection, and scheduling are all
-> implemented, tested (100% coverage), and live on PyPI — see
+> **Status: 0.2.0, published.** Job store, worker pool, status router,
+> retries with backoff, dependency injection, scheduling, lifecycle hooks,
+> and bounded in-memory growth are all implemented, tested (100%
+> coverage), and live on PyPI — see
 > [`CHANGELOG.md`](https://github.com/jmiguelmangas/errand/blob/main/CHANGELOG.md).
 >
 > The PyPI name `errand` turned out to be taken by an unrelated, actively
@@ -96,13 +104,6 @@ GET /jobs/{job_id}
    "attempts": 1, "created_at": "...", "started_at": "...", ...}
 ```
 
-> **Note:** `enqueue()` returns immediately with a `PENDING` job, but
-> persisting that record happens on the next tick of the event loop. If you
-> call `get_job()` (or hit the status endpoint) *immediately* afterward with
-> no `await` in between, you can get `None`/404 for an instant. Poll
-> tolerantly rather than asserting the record exists on the first check —
-> see the quickstart tests in the repo for the pattern.
-
 ## Dependency injection in tasks
 
 The same pattern you use in routes, teardown included:
@@ -141,6 +142,32 @@ async def heartbeat() -> None:
 ```
 
 Scheduled runs are tracked exactly like enqueued jobs.
+
+## Lifecycle hooks
+
+Get visibility into job outcomes without wrapping every task:
+
+```python
+@tasks.on_success
+def log_success(job: Job) -> None:
+    print(f"{job.name} succeeded: {job.result_repr}")
+
+
+@tasks.on_failure
+def alert_on_failure(job: Job) -> None:
+    print(f"{job.name} failed: {job.error}")
+
+
+@tasks.on_retry
+def log_retry(job: Job) -> None:
+    print(f"{job.name} retrying (attempt {job.attempts})")
+```
+
+Each decorator can be used multiple times; every registered hook fires, in
+registration order, with an immutable snapshot of the job as of that exact
+transition. Hooks may be sync or async — keep them fast, they run inline on
+the event loop, not in a thread. A hook that raises is logged and doesn't
+affect the job or any other hook.
 
 ## Using errand with sync frameworks (Flask, Django)
 
@@ -213,6 +240,20 @@ asyncio.run_coroutine_threadsafe(tasks.shutdown(), _loop).result()
 The core ships with `InMemoryJobStore`. The `JobStore` interface is the single
 seam for durability — a Redis or Postgres store can be added later as an
 optional extra without changing any task code.
+
+`InMemoryJobStore` keeps every job record until the process exits or
+something prunes it — unbounded growth in a long-running process. For that
+case, pass `prune_after` (seconds) to `Errand(...)` and it prunes terminal
+jobs (`SUCCEEDED`/`FAILED`/`CANCELLED`) automatically once their
+`finished_at` is older than that, on a background check (at most every 60s).
+Jobs still `PENDING`/`RUNNING` are never touched, however old:
+
+```python
+tasks = Errand(prune_after=86400)  # drop finished jobs after 24h
+```
+
+Off by default — a short-lived process, or one backed by a durable store,
+usually doesn't need it.
 
 ## Roadmap
 
