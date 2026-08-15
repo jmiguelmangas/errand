@@ -1,5 +1,9 @@
 # errand
 
+<p align="center">
+  <img src="./assets/logo.png" alt="errand logo" width="200">
+</p>
+
 > Stateful background jobs — the missing middle ground between FastAPI's
 > `BackgroundTasks` and Celery. **A zero-dependency engine with an optional,
 > first-class FastAPI adapter.**
