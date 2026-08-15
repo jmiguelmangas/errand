@@ -240,6 +240,20 @@ The core ships with `InMemoryJobStore`. The `JobStore` interface is the single
 seam for durability — a Redis or Postgres store can be added later as an
 optional extra without changing any task code.
 
+`InMemoryJobStore` keeps every job record until the process exits or
+something prunes it — unbounded growth in a long-running process. For that
+case, pass `prune_after` (seconds) to `Errand(...)` and it prunes terminal
+jobs (`SUCCEEDED`/`FAILED`/`CANCELLED`) automatically once their
+`finished_at` is older than that, on a background check (at most every 60s).
+Jobs still `PENDING`/`RUNNING` are never touched, however old:
+
+```python
+tasks = Errand(prune_after=86400)  # drop finished jobs after 24h
+```
+
+Off by default — a short-lived process, or one backed by a durable store,
+usually doesn't need it.
+
 ## Roadmap
 
 All of [`TASKS.md`](https://github.com/jmiguelmangas/errand/blob/main/TASKS.md)'s

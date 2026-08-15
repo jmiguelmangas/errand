@@ -11,7 +11,7 @@ import asyncio
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any, TypeVar, overload
 
 from .errors import UnknownTaskError
@@ -25,6 +25,8 @@ F = TypeVar("F", bound=Callable[..., Any])
 
 _NAME_ATTR = "__errand_name__"
 _DEFAULT_SHUTDOWN_TIMEOUT = 5.0
+_PRUNE_SCHEDULE_NAME = "__prune__"
+_MAX_PRUNE_CHECK_INTERVAL = 60.0
 
 
 @dataclass
@@ -48,6 +50,16 @@ class Errand:
         job = tasks.enqueue(send_email, user_id=1)
         job.status
         # JobStatus.PENDING
+
+    ``InMemoryJobStore`` (the default) keeps every job record until the
+    process exits or something prunes it -- unbounded in a long-running
+    process. Pass ``prune_after`` (seconds) to have ``Errand`` do that
+    automatically: it periodically drops terminal jobs (``SUCCEEDED``/
+    ``FAILED``/``CANCELLED``) whose ``finished_at`` is older than that,
+    via the store's existing ``prune()``. This never touches jobs that
+    are still ``PENDING``/``RUNNING``, however old. Off by default (``None``)
+    -- opt in for long-running processes; a short-lived script or one
+    backed by a durable store usually doesn't need it.
     """
 
     def __init__(
@@ -58,6 +70,7 @@ class Errand:
         result_repr_max: int = 500,
         shutdown_timeout: float = _DEFAULT_SHUTDOWN_TIMEOUT,
         default_retry: RetryPolicy | None = None,
+        prune_after: float | None = None,
     ) -> None:
         self._store = store if store is not None else InMemoryJobStore()
         self._registry: dict[str, _Registration] = {}
@@ -75,6 +88,12 @@ class Errand:
         self._background: set[asyncio.Task[None]] = set()
         self._router: Any = None
         self._scheduler = Scheduler()
+        self._prune_after = prune_after
+        if prune_after is not None:
+            check_interval = min(prune_after, _MAX_PRUNE_CHECK_INTERVAL)
+            self._scheduler.add_interval(
+                _PRUNE_SCHEDULE_NAME, check_interval, self._trigger_prune
+            )
 
     @overload
     def task(self, fn: F) -> F: ...
@@ -261,6 +280,16 @@ class Errand:
     ) -> list[Job]:
         """List jobs newest-first, optionally filtered by ``status``."""
         return await self._store.list(status=status, limit=limit, offset=offset)
+
+    def _trigger_prune(self) -> None:
+        task = asyncio.create_task(self._prune_once())
+        self._background.add(task)
+        task.add_done_callback(self._background.discard)
+
+    async def _prune_once(self) -> None:
+        assert self._prune_after is not None
+        cutoff = datetime.now(timezone.utc) - timedelta(seconds=self._prune_after)
+        await self._store.prune(cutoff)
 
     def on_success(self, fn: TaskHook) -> TaskHook:
         """Register a hook that fires after a job reaches ``SUCCEEDED``.
