@@ -5,6 +5,53 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0]
+
+Post-0.1.1 hardening pass (see `NEXT_STEPS.md` for the full plan this
+implements).
+
+### Added
+
+- **Lifecycle hooks.** `Errand.on_success`/`on_failure`/`on_retry` — bare
+  decorators, each registrable multiple times; every registered hook fires,
+  in registration order, with an immutable snapshot of the job as of that
+  exact transition. Sync or async; a hook that raises is logged and doesn't
+  affect the job or other hooks.
+- **Bounded in-memory growth.** `Errand(prune_after=<seconds>)` — off by
+  default; when set, automatically prunes terminal jobs older than that on
+  a background interval (capped at 60s), reusing the existing scheduler.
+  Never touches `PENDING`/`RUNNING` jobs.
+- `LICENSE` file (MIT), plus `license-files` in `pyproject.toml` (PEP 639)
+  so it ships in the wheel and sdist.
+- PyPI metadata: `authors`, `keywords`, `classifiers`, `project.urls`
+  (Homepage/Repository/Issues/Changelog).
+- PyPI version, Python-versions, CI status, and license badges in the
+  README.
+
+### Fixed
+
+- **`enqueue()`/`get_job()` visibility race.** `enqueue()` used to schedule
+  the job's initial persistence as a background task and return before
+  that task had run, so an immediately-following `get_job()` (no `await`
+  in between) could briefly return `None`. `JobStore` gained
+  `create_sync()`, a best-effort synchronous create (`InMemoryJobStore`
+  overrides it; durable stores default to `False` and keep the old async
+  path); for the default store, the `PENDING` record is now durable
+  *before* `enqueue()` returns, no polling needed.
+
+### Changed
+
+- Coverage gate raised from 90% to 100% (the suite has been at 100% since
+  M1); one Python-3.11-only coverage.py tracer false negative excluded
+  with a documented `pragma: no cover`, not by loosening the gate.
+- `ruff` now also runs the `ASYNC`, `RUF`, `PT`, and `C4` rule sets.
+- Sdist trimmed (~786 kB → ~39 kB): `assets/`, `.github/`, and `uv.lock`
+  don't belong in a source distribution.
+- CI: GitHub Actions pinned to commit SHAs (was moving tags/branches),
+  with Dependabot now keeping them current via reviewable PRs; test job
+  now runs across `ubuntu-latest`/`macos-latest`/`windows-latest`, not
+  just Ubuntu.
+
 ## [0.1.1]
 
 ### Fixed

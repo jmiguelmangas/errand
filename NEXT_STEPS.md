@@ -1,5 +1,9 @@
 # NEXT_STEPS.md — post-0.1.1 hardening
 
+> **Status: all of P0–P3 done, shipped in 0.2.0.** Kept below as a record
+> of what was done and why; see `CHANGELOG.md`'s `[0.2.0]` entry for the
+> shipped summary. Nothing here is still outstanding.
+
 Actionable follow-ups from the post-release audit, ordered by priority. Same
 rules as the rest of the repo apply: zero runtime deps in the engine, FastAPI
 only in `_fastapi.py`, and every change lands green (ruff + mypy strict +
