@@ -107,7 +107,7 @@ class Runner:
         await self._queue.put(_Envelope(job=job, fn=fn, args=args, kwargs=kwargs))
 
     async def _drain(self, timeout: float | None) -> None:
-        with suppress(TimeoutError):
+        with suppress(asyncio.TimeoutError):
             await asyncio.wait_for(self._queue.join(), timeout=timeout)
 
     async def _fail_remaining_queue_items(self) -> None:
