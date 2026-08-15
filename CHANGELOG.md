@@ -7,8 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.2.0]
 
-Post-0.1.1 hardening pass (see `NEXT_STEPS.md` for the full plan this
-implements).
+Post-0.1.1 hardening pass: correctness fixes, packaging/CI improvements,
+and two new features (lifecycle hooks and bounded in-memory growth).
 
 ### Added
 

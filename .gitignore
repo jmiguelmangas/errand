@@ -14,3 +14,11 @@ htmlcov/
 .ruff_cache/
 .python-version
 .DS_Store
+
+# Internal working docs for AI-assisted development -- not relevant to
+# users of the library. Kept locally, not published to GitHub/PyPI.
+/CLAUDE.md
+/DESIGN.md
+/TASKS.md
+/NEXT_STEPS.md
+/CHECKLIST_*.md
