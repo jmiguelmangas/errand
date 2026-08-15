@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from typing import Any, TypeVar, overload
 
 from .errors import UnknownTaskError
-from .models import Job
+from .models import Job, JobStatus
 from .runner import Runner
 from .store import InMemoryJobStore, JobStore
 
@@ -53,6 +53,7 @@ class Errand:
         )
         self._shutdown_timeout = shutdown_timeout
         self._background: set[asyncio.Task[None]] = set()
+        self._router: Any = None
 
     @overload
     def task(self, fn: F) -> F: ...
@@ -104,6 +105,30 @@ class Errand:
     async def get_job(self, job_id: str) -> Job | None:
         """Return the job with ``job_id``, or ``None`` if unknown."""
         return await self._store.get(job_id)
+
+    async def list_jobs(
+        self, *, status: JobStatus | None = None, limit: int = 50, offset: int = 0
+    ) -> list[Job]:
+        """List jobs newest-first, optionally filtered by ``status``."""
+        return await self._store.list(status=status, limit=limit, offset=offset)
+
+    @property
+    def router(self) -> Any:
+        """A read-only FastAPI status router: ``GET /`` and ``GET /{job_id}``.
+
+        Built lazily on first access via :mod:`errand._fastapi`, the only
+        module that imports FastAPI. Raises ``ImportError`` with an
+        actionable message if FastAPI isn't installed.
+
+        Example::
+
+            app.include_router(tasks.router, prefix="/jobs")
+        """
+        if self._router is None:
+            from ._fastapi import build_router
+
+            self._router = build_router(self)
+        return self._router
 
     async def startup(self) -> None:
         """Start the worker pool. Call from your app's startup/lifespan."""
