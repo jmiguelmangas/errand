@@ -5,6 +5,34 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1]
+
+Follow-up review pass on 0.2.0.
+
+### Fixed
+
+- **Lifecycle hooks could block a worker.** `on_success`/`on_failure`/
+  `on_retry` hooks were awaited inline in the worker's job-processing
+  path, so a slow or hanging hook (e.g. a metrics call that hangs) could
+  hold a worker slot indefinitely — with `max_workers=1`, a single stuck
+  hook could stall all job processing. Hooks now run as detached
+  background tasks; a slow hook can no longer delay the next job or a
+  scheduled retry. `shutdown()` gives outstanding hook tasks the same
+  grace period already used for draining jobs, then cancels whatever's
+  left, so shutdown still can't hang forever on a stuck hook.
+
+### Changed
+
+- Scoped the immediate-post-`enqueue()`-visibility guarantee to
+  `InMemoryJobStore` specifically in the README — it's `create_sync()`
+  that makes it possible; a future durable store without it falls back
+  to the (already-existing) async path and is eventually consistent on
+  the initial record.
+- Removed `CLAUDE.md`, `DESIGN.md`, `TASKS.md`, and the internal
+  hardening-plan doc from the repository, sdist, and wheel — internal
+  planning documents for this project's development, not relevant to
+  users of the library.
+
 ## [0.2.0]
 
 Post-0.1.1 hardening pass: correctness fixes, packaging/CI improvements,

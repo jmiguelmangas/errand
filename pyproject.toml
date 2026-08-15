@@ -1,6 +1,6 @@
 [project]
 name = "errand-jobs"
-version = "0.2.0"
+version = "0.2.1"
 description = "Stateful background jobs — a zero-dependency engine with an optional FastAPI adapter."
 readme = "README.md"
 requires-python = ">=3.10"
