@@ -5,6 +5,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1]
+
+### Fixed
+
+- README's logo and in-repo doc links (`CHANGELOG.md`, `TASKS.md`,
+  `DESIGN.md`, `CLAUDE.md`) used relative paths, which GitHub resolves
+  against the repo tree but PyPI does not — they rendered broken on the
+  PyPI project page. Switched to absolute `raw.githubusercontent.com` /
+  `github.com/.../blob/main` URLs, which work on both.
+
 ## [0.1.0]
 
 Initial release.
