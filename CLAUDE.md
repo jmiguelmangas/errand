@@ -14,7 +14,7 @@ A stateful, in-process background-job library for FastAPI that sits between
 1. **Zero runtime dependencies in the engine.** Every module except
    `_fastapi.py` imports *only* the standard library. No `fastapi`, no Redis
    client, no Celery, no APScheduler, no croniter, no pydantic. Importing
-   `errand` must not import FastAPI. If something seems to need a dependency,
+   `errand_jobs` must not import FastAPI. If something seems to need a dependency,
    stop and flag it instead of adding it.
 2. **FastAPI is an optional, lazily-imported adapter.** `_fastapi.py` is the
    only module allowed to import FastAPI, and it must do so *inside* the function
@@ -23,7 +23,7 @@ A stateful, in-process background-job library for FastAPI that sits between
    **not installed**.
 3. **Recognise `Depends` by duck typing, never by importing it.** A dependency
    marker is any object with a `.dependency` attribute — this matches both our
-   own `errand.Depends` and `fastapi.Depends()`. Do not `import fastapi` in
+   own `errand_jobs.Depends` and `fastapi.Depends()`. Do not `import fastapi` in
    `di.py`.
 4. **Do not import FastAPI internals** (`fastapi.dependencies.utils`, private
    modules). The only public FastAPI symbol we touch is `APIRouter`, in
@@ -47,7 +47,7 @@ uv run ruff check .             # lint
 uv run ruff format --check .    # format check
 uv run mypy src                 # types (strict)
 uv run pytest                   # tests
-uv run pytest --cov=errand --cov-report=term-missing
+uv run pytest --cov=errand_jobs --cov-report=term-missing
 ```
 
 ## Definition of Done (every change)

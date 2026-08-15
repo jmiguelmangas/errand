@@ -2,8 +2,8 @@ from datetime import datetime
 
 import pytest
 
-from errand import CronParseError
-from errand.cron import CronSchedule
+from errand_jobs import CronParseError
+from errand_jobs.cron import CronSchedule
 
 
 def test_wildcard_every_minute() -> None:

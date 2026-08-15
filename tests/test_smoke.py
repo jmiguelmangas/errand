@@ -8,7 +8,7 @@ def test_import_does_not_pull_in_fastapi() -> None:
         if module == "fastapi" or module.startswith("fastapi."):
             del sys.modules[module]
 
-    import errand
+    import errand_jobs
 
-    assert errand.__version__
+    assert errand_jobs.__version__
     assert "fastapi" not in sys.modules

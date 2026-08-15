@@ -263,7 +263,7 @@ toml = [
 ]
 
 [[package]]
-name = "errand"
+name = "errand-jobs"
 version = "0.1.0"
 source = { editable = "." }
 

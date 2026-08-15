@@ -1,4 +1,4 @@
-from errand import RetryPolicy
+from errand_jobs import RetryPolicy
 
 
 def test_none_backoff_is_always_zero() -> None:

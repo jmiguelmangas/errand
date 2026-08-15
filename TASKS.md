@@ -12,18 +12,18 @@ before the next one starts. One branch and one PR per milestone.
 Scope:
 - `pyproject.toml` as in `DESIGN.md` (hatchling, `dependencies = []`, `fastapi`
   as an optional extra, dev extras for tooling).
-- `src/errand/__init__.py` with a `__version__`.
+- `src/errand_jobs/__init__.py` with a `__version__`.
 - ruff, mypy (strict), pytest, coverage config.
 - `.github/workflows/ci.yml`: matrix Python 3.10–3.13, run ruff, mypy, pytest,
   coverage gate. Include a **second job that installs the base package without
   the `fastapi` extra** and runs the engine tests, proving the engine has no
   FastAPI dependency.
-- One smoke test: `import errand` works (and does **not** import fastapi).
+- One smoke test: `import errand_jobs` works (and does **not** import fastapi).
 
 Acceptance:
 - `uv run ruff check .`, `uv run mypy src`, `uv run pytest` all pass locally and
   in CI, including the no-FastAPI job.
-- `import errand` does not pull in `fastapi` (assert `"fastapi" not in
+- `import errand_jobs` does not pull in `fastapi` (assert `"fastapi" not in
   sys.modules` after import).
 
 Out of scope: any real functionality.
@@ -74,7 +74,7 @@ Scope:
   `GET /` (paginated, `?status=` filter) and `GET /{job_id}` (404 on unknown).
   Read-only.
 - `Errand.router` property that builds it on first access; a clear error
-  (pointing to `pip install errand[fastapi]`) if FastAPI is absent.
+  (pointing to `pip install errand-jobs[fastapi]`) if FastAPI is absent.
 
 Acceptance:
 - Tests via `TestClient`: list returns enqueued jobs, filter works, unknown id
@@ -107,7 +107,7 @@ Acceptance:
 **Goal:** the differentiator — `Depends(...)` inside tasks, with teardown.
 
 Scope:
-- `di.py`: define `errand.Depends` (a `.dependency`-bearing marker) and a
+- `di.py`: define `errand_jobs.Depends` (a `.dependency`-bearing marker) and a
   resolver that recognises any `.dependency` marker by duck typing — **no import
   of fastapi**. Support sync/async/generator/async-generator deps, nested
   `Depends`, per-job caching, teardown via one `AsyncExitStack` per job (runs on
@@ -122,8 +122,8 @@ Acceptance:
   torn down after failure; nested deps resolved; enqueued kwargs override a dep;
   unsupported dep raises a clear error.
 - Interop test: a `fastapi.Depends(...)` resolves identically to
-  `errand.Depends(...)`. The core DI tests pass with FastAPI **not** installed
-  (using `errand.Depends`).
+  `errand_jobs.Depends(...)`. The core DI tests pass with FastAPI **not**
+  installed (using `errand_jobs.Depends`).
 
 ---
 
@@ -156,7 +156,7 @@ Scope:
   (pure logic → aim 100%).
 - Release workflow: build with hatchling, publish to PyPI via **trusted
   publishing (OIDC)** on tag `v*`. No API tokens committed.
-- Verify a clean `pip install errand` in a fresh venv runs the quickstart.
+- Verify a clean `pip install errand-jobs` in a fresh venv runs the quickstart.
 
 Acceptance:
 - Tag build produces a wheel + sdist; dry-run publish succeeds; fresh-install

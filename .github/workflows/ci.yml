@@ -33,7 +33,7 @@ jobs:
         run: uv run mypy src
 
       - name: Test with coverage
-        run: uv run pytest --cov=errand --cov-report=term-missing
+        run: uv run pytest --cov=errand_jobs --cov-report=term-missing
 
   engine-without-fastapi:
     name: engine tests (no fastapi extra)

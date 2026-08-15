@@ -1,8 +1,8 @@
-"""FastAPI adapter — the ONLY module in errand that imports FastAPI.
+"""FastAPI adapter — the ONLY module in errand_jobs that imports FastAPI.
 
 The import happens lazily, inside :func:`build_router`, never at module
-top level. Nothing else in errand imports this module until
-:attr:`~errand.core.Errand.router` is accessed for the first time, so
+top level. Nothing else in errand_jobs imports this module until
+:attr:`~errand_jobs.core.Errand.router` is accessed for the first time, so
 FastAPI is never required just to use the engine.
 """
 
@@ -28,14 +28,14 @@ def build_router(tasks: Errand) -> APIRouter:
     - ``GET /{job_id}`` — a single job record, 404 if unknown.
 
     Raises ``ImportError`` with an actionable message (``pip install
-    errand[fastapi]``) if FastAPI isn't installed.
+    errand-jobs[fastapi]``) if FastAPI isn't installed.
     """
     try:
         from fastapi import APIRouter, HTTPException
     except ImportError as exc:
         raise ImportError(
-            "errand.router requires FastAPI. Install it with "
-            "`pip install errand[fastapi]`."
+            "The status router requires FastAPI. Install it with "
+            "`pip install errand-jobs[fastapi]`."
         ) from exc
 
     router = APIRouter()

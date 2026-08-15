@@ -4,8 +4,8 @@ Everything here is stdlib-only. A :class:`Runner` owns an
 :class:`asyncio.Queue` of pending work and a fixed pool of worker
 coroutines; each worker pulls one envelope at a time, transitions the
 job through ``RUNNING`` to a terminal status, and persists every
-transition to the :class:`~errand.store.JobStore`. On failure, the
-configured :class:`~errand.retry.RetryPolicy` decides whether to
+transition to the :class:`~errand_jobs.store.JobStore`. On failure, the
+configured :class:`~errand_jobs.retry.RetryPolicy` decides whether to
 re-enqueue after a delay or mark the job ``FAILED``; the delay is a
 separate timer task so a retry wait never blocks a worker.
 """

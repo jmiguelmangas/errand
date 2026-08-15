@@ -3,7 +3,7 @@ import time
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from errand import Errand, JobStatus
+from errand_jobs import Errand, JobStatus
 
 
 def _build_app() -> tuple[FastAPI, Errand]:

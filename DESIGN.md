@@ -2,7 +2,7 @@
 
 The engine is **pure standard library** and imports nothing else. FastAPI is an
 **optional integration**, isolated in a single adapter module and imported
-lazily — importing `errand` never imports FastAPI. This document is the
+lazily — importing `errand_jobs` never imports FastAPI. This document is the
 contract; `TASKS.md` builds it incrementally.
 
 ## Coupling & version stability
@@ -15,7 +15,7 @@ release could break it. So:
 - **Dependency markers are duck-typed.** The resolver treats *any* object with a
   `.dependency` attribute as a `Depends` marker. FastAPI's `Depends()` has that
   attribute, so it works without being imported. We also ship our own
-  `errand.Depends` for standalone use.
+  `errand_jobs.Depends` for standalone use.
 - **The lifespan is a plain async context manager.** That's the ASGI/Starlette
   contract, not FastAPI's to change — it plugs into `FastAPI(lifespan=...)` with
   no FastAPI import.
@@ -31,7 +31,7 @@ FastAPI **internals are never imported** (enforced in `CLAUDE.md`).
 ## Module layout
 
 ```
-src/errand/
+src/errand_jobs/
 ├── __init__.py        # public exports: Errand, Job, JobStatus, JobStore, InMemoryJobStore, Depends
 ├── models.py          # Job dataclass, JobStatus enum          [stdlib only]
 ├── store.py           # JobStore ABC + InMemoryJobStore         [stdlib only]
@@ -149,7 +149,7 @@ class Depends:
 ```
 
 A parameter is a dependency if its default has a `.dependency` attribute. That
-matches both `errand.Depends` and `fastapi.Depends()` (which also exposes
+matches both `errand_jobs.Depends` and `fastapi.Depends()` (which also exposes
 `.dependency`), so FastAPI users pass their usual `Depends(...)` and it just
 works — with zero import of FastAPI. Supported:
 
@@ -198,7 +198,7 @@ Deterministic under an injectable `now()` for tests.
 The **only** module that imports FastAPI, and it does so lazily (inside the
 builder function, not at module top level). `Errand.router` calls it on first
 access; if FastAPI isn't installed it raises a clear error pointing the user to
-`pip install errand[fastapi]`.
+`pip install errand-jobs[fastapi]`.
 
 Optional `APIRouter`, opt-in via `app.include_router(tasks.router)`:
 
@@ -263,7 +263,7 @@ messages.
 
 ```toml
 [project]
-name = "errand"
+name = "errand-jobs"
 version = "0.1.0"
 description = "Stateful background jobs — a zero-dependency engine with an optional FastAPI adapter."
 readme = "README.md"

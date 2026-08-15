@@ -10,8 +10,9 @@ class ErrandError(Exception):
 class UnknownTaskError(ErrandError):
     """Raised when enqueuing a callable or name that was never registered.
 
-    Only functions decorated with :meth:`~errand.core.Errand.task` (or their
-    registered name) can be passed to :meth:`~errand.core.Errand.enqueue`.
+    Only functions decorated with :meth:`~errand_jobs.core.Errand.task` (or
+    their registered name) can be passed to
+    :meth:`~errand_jobs.core.Errand.enqueue`.
     """
 
 
