@@ -267,18 +267,15 @@ usually doesn't need it.
 
 ## Roadmap
 
-All of [`TASKS.md`](https://github.com/jmiguelmangas/errand/blob/main/TASKS.md)'s
-milestones (M0–M7) are implemented, tested, and merged — this is a complete
-0.1.0, not a work in progress. `TASKS.md` is kept as the historical build
-plan; contributor and architecture notes live in
-[`DESIGN.md`](https://github.com/jmiguelmangas/errand/blob/main/DESIGN.md)
-and [`CLAUDE.md`](https://github.com/jmiguelmangas/errand/blob/main/CLAUDE.md);
-release notes are in
-[`CHANGELOG.md`](https://github.com/jmiguelmangas/errand/blob/main/CHANGELOG.md).
+The core feature set (job store, worker pool, status router, retries,
+dependency injection, scheduling, lifecycle hooks, bounded memory) is
+implemented, tested, and released — see
+[`CHANGELOG.md`](https://github.com/jmiguelmangas/errand/blob/main/CHANGELOG.md)
+for what shipped in each version.
 
-Explicitly deferred past 0.1.0 (called out as such in `DESIGN.md`): a
-durable `JobStore` (Redis/Postgres — the interface is already the seam for
-it), remote enqueue/cancel over HTTP, and jitter on retry backoff.
+Not yet built: a durable `JobStore` (Redis/Postgres — the interface is
+already the seam for it), remote enqueue/cancel over HTTP, and jitter on
+retry backoff.
 
 ## License
 
