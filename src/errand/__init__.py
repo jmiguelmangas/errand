@@ -8,7 +8,12 @@ never imports FastAPI.
 
 from .core import Errand
 from .di import Depends
-from .errors import ErrandError, UnknownTaskError, UnsupportedDependencyError
+from .errors import (
+    CronParseError,
+    ErrandError,
+    UnknownTaskError,
+    UnsupportedDependencyError,
+)
 from .models import Job, JobStatus
 from .retry import RetryPolicy
 from .store import InMemoryJobStore, JobStore
@@ -16,6 +21,7 @@ from .store import InMemoryJobStore, JobStore
 __version__ = "0.1.0"
 
 __all__ = [
+    "CronParseError",
     "Depends",
     "Errand",
     "ErrandError",
