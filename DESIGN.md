@@ -98,6 +98,15 @@ class JobStore(ABC):
 `InMemoryJobStore`: a `dict[str, Job]` guarded by an `asyncio.Lock`. `list`
 returns newest-first. `prune` drops terminal jobs older than a cutoff. That's
 it — no threading concerns because everything runs on the event loop.
+Nothing calls `prune` on its own, though: pass `Errand(prune_after=...)`
+(seconds) and the engine calls it automatically on an internal interval
+schedule (reusing `scheduler.py`'s `Scheduler.add_interval`, registered
+under a private name a user schedule can never collide with, since
+schedule names aren't looked up anywhere) — capped at a 60s check
+interval, same reasoning as the scheduler's own max tick. Off by default;
+an unbounded in-memory store is fine for a short-lived process or one
+that's not accumulating millions of terminal jobs, and a durable store
+usually wants its own retention policy instead.
 
 `create_sync` exists so `Errand.enqueue()` (a plain, non-async method) can
 make the job's `PENDING` record immediately visible via `get`/`list` before
@@ -226,7 +235,8 @@ avoids an obvious abuse surface).
 class Errand:
     def __init__(self, *, store: JobStore | None = None, max_workers: int = 4,
                  default_retry: RetryPolicy | None = None,
-                 result_repr_max: int = 500) -> None: ...
+                 result_repr_max: int = 500,
+                 prune_after: float | None = None) -> None: ...
 
     # registration
     def task(self, fn=None, *, name=None, max_retries=0,
