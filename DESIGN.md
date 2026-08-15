@@ -314,6 +314,6 @@ files = ["src"]
 asyncio_mode = "auto"
 
 [tool.coverage.report]
-fail_under = 90
+fail_under = 100
 show_missing = true
 ```

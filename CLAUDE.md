@@ -56,7 +56,9 @@ A change is not done until:
 
 - `ruff check` and `ruff format --check` are clean.
 - `mypy src` passes with no errors.
-- `pytest` is green and **coverage does not drop below 90%**.
+- `pytest` is green and **coverage stays at 100%** (the enforced gate, per
+  `[tool.coverage.report] fail_under` in `pyproject.toml` — the source of
+  truth if this drifts from that file).
 - New public behaviour has a test and a docstring.
 - The milestone's acceptance criteria in `TASKS.md` are all met.
 
