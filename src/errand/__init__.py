@@ -9,6 +9,7 @@ never imports FastAPI.
 from .core import Errand
 from .errors import ErrandError, UnknownTaskError
 from .models import Job, JobStatus
+from .retry import RetryPolicy
 from .store import InMemoryJobStore, JobStore
 
 __version__ = "0.1.0"
@@ -20,6 +21,7 @@ __all__ = [
     "Job",
     "JobStatus",
     "JobStore",
+    "RetryPolicy",
     "UnknownTaskError",
     "__version__",
 ]

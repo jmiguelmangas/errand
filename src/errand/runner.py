@@ -4,7 +4,10 @@ Everything here is stdlib-only. A :class:`Runner` owns an
 :class:`asyncio.Queue` of pending work and a fixed pool of worker
 coroutines; each worker pulls one envelope at a time, transitions the
 job through ``RUNNING`` to a terminal status, and persists every
-transition to the :class:`~errand.store.JobStore`.
+transition to the :class:`~errand.store.JobStore`. On failure, the
+configured :class:`~errand.retry.RetryPolicy` decides whether to
+re-enqueue after a delay or mark the job ``FAILED``; the delay is a
+separate timer task so a retry wait never blocks a worker.
 """
 
 from __future__ import annotations
@@ -18,6 +21,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .models import Job, JobStatus
+from .retry import RetryPolicy
 from .store import JobStore
 
 TaskFunc = Callable[..., Any]
@@ -32,7 +36,7 @@ def _utcnow() -> datetime:
 
 @dataclass
 class _Envelope:
-    """A job paired with the callable and arguments needed to run it.
+    """A job paired with everything needed to run and, on failure, retry it.
 
     Kept in memory only — never persisted, per the store's contract.
     """
@@ -41,6 +45,7 @@ class _Envelope:
     fn: TaskFunc
     args: tuple[Any, ...]
     kwargs: dict[str, Any]
+    retry: RetryPolicy
 
 
 class Runner:
@@ -50,7 +55,7 @@ class Runner:
 
         runner = Runner(InMemoryJobStore(), max_workers=4)
         await runner.start()
-        await runner.submit(Job(name="ping"), ping, (), {})
+        await runner.submit(Job(name="ping"), ping, (), {}, RetryPolicy())
         await runner.stop()
     """
 
@@ -66,6 +71,7 @@ class Runner:
         self._result_repr_max = result_repr_max
         self._queue: asyncio.Queue[_Envelope] = asyncio.Queue()
         self._workers: list[asyncio.Task[None]] = []
+        self._retry_timers: set[asyncio.Task[None]] = set()
 
     async def start(self) -> None:
         """Spawn the worker coroutines. Safe to call at most once."""
@@ -78,9 +84,10 @@ class Runner:
     async def stop(self, *, drain: bool = True, timeout: float | None = None) -> None:
         """Stop the pool.
 
-        If ``drain`` is true, wait up to ``timeout`` seconds for pending and
-        in-flight jobs to finish. Anything still unfinished after that is
-        cancelled and marked ``FAILED`` with a shutdown note.
+        If ``drain`` is true, wait up to ``timeout`` seconds for pending,
+        in-flight, and retry-pending jobs to finish. Anything still
+        unfinished after that is cancelled and marked ``FAILED`` with a
+        shutdown note.
         """
         if not self._workers:
             return
@@ -93,6 +100,7 @@ class Runner:
         await asyncio.gather(*self._workers, return_exceptions=True)
         self._workers = []
 
+        await self._cancel_retry_timers()
         await self._fail_remaining_queue_items()
 
     async def submit(
@@ -101,14 +109,31 @@ class Runner:
         fn: TaskFunc,
         args: tuple[Any, ...],
         kwargs: dict[str, Any],
+        retry: RetryPolicy,
     ) -> None:
         """Persist ``job`` as ``PENDING`` and queue it for a worker."""
+        job.max_retries = retry.max_retries
         await self._store.create(job)
-        await self._queue.put(_Envelope(job=job, fn=fn, args=args, kwargs=kwargs))
+        envelope = _Envelope(job=job, fn=fn, args=args, kwargs=kwargs, retry=retry)
+        await self._queue.put(envelope)
 
     async def _drain(self, timeout: float | None) -> None:
         with suppress(asyncio.TimeoutError):
-            await asyncio.wait_for(self._queue.join(), timeout=timeout)
+            await asyncio.wait_for(self._drain_fully(), timeout=timeout)
+
+    async def _drain_fully(self) -> None:
+        while True:
+            await self._queue.join()
+            if not self._retry_timers:
+                return
+            await asyncio.gather(*self._retry_timers)
+
+    async def _cancel_retry_timers(self) -> None:
+        timers = list(self._retry_timers)
+        for timer in timers:
+            timer.cancel()
+        if timers:
+            await asyncio.gather(*timers, return_exceptions=True)
 
     async def _fail_remaining_queue_items(self) -> None:
         while not self._queue.empty():
@@ -143,7 +168,7 @@ class Runner:
         try:
             result = await self._call(envelope.fn, envelope.args, envelope.kwargs)
         except Exception as exc:
-            await self._mark_failed(job, exc)
+            await self._handle_failure(envelope, exc)
             return
 
         job.status = JobStatus.SUCCEEDED
@@ -157,10 +182,31 @@ class Runner:
             return await fn(*args, **kwargs)
         return await asyncio.to_thread(fn, *args, **kwargs)
 
-    async def _mark_failed(self, job: Job, exc: Exception) -> None:
-        job.status = JobStatus.FAILED
+    async def _handle_failure(self, envelope: _Envelope, exc: Exception) -> None:
+        job = envelope.job
         job.error = f"{type(exc).__name__}: {exc}"
         formatted = "".join(traceback_module.format_exception(exc))
         job.traceback = formatted[:_TRACEBACK_MAX_CHARS]
+
+        if job.attempts <= envelope.retry.max_retries:
+            job.status = JobStatus.PENDING
+            await self._store.update(job)
+            self._schedule_retry(envelope, envelope.retry.delay_for(job.attempts))
+            return
+
+        job.status = JobStatus.FAILED
         job.finished_at = _utcnow()
         await self._store.update(job)
+
+    def _schedule_retry(self, envelope: _Envelope, delay: float) -> None:
+        timer = asyncio.create_task(self._retry_after_delay(envelope, delay))
+        self._retry_timers.add(timer)
+        timer.add_done_callback(self._retry_timers.discard)
+
+    async def _retry_after_delay(self, envelope: _Envelope, delay: float) -> None:
+        try:
+            await asyncio.sleep(delay)
+        except asyncio.CancelledError:
+            await self._mark_shutdown_failed(envelope.job)
+            raise
+        await self._queue.put(envelope)
