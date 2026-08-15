@@ -22,3 +22,7 @@ class UnsupportedDependencyError(ErrandError):
     ``Request``/``Response``/``WebSocket``/``BackgroundTasks`` parameters
     and FastAPI security scopes (``Security(...)``) aren't supported.
     """
+
+
+class CronParseError(ErrandError):
+    """Raised for a malformed 5-field cron expression."""

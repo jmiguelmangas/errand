@@ -11,12 +11,14 @@ import asyncio
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, replace
+from datetime import datetime
 from typing import Any, TypeVar, overload
 
 from .errors import UnknownTaskError
 from .models import Job, JobStatus
 from .retry import BackoffKind, RetryPolicy
 from .runner import Runner
+from .scheduler import Scheduler
 from .store import InMemoryJobStore, JobStore
 
 F = TypeVar("F", bound=Callable[..., Any])
@@ -68,6 +70,7 @@ class Errand:
         self._shutdown_timeout = shutdown_timeout
         self._background: set[asyncio.Task[None]] = set()
         self._router: Any = None
+        self._scheduler = Scheduler()
 
     @overload
     def task(self, fn: F) -> F: ...
@@ -106,17 +109,30 @@ class Errand:
         """
 
         def decorator(func: F) -> F:
-            task_name = name or func.__name__
-            retry = self._resolve_retry_policy(
-                max_retries, retry_backoff, base_delay, max_delay
+            return self._register_task(
+                func, name, max_retries, retry_backoff, base_delay, max_delay
             )
-            self._registry[task_name] = _Registration(fn=func, retry=retry)
-            setattr(func, _NAME_ATTR, task_name)
-            return func
 
         if fn is not None:
             return decorator(fn)
         return decorator
+
+    def _register_task(
+        self,
+        func: F,
+        name: str | None,
+        max_retries: int | None,
+        retry_backoff: BackoffKind | None,
+        base_delay: float | None,
+        max_delay: float | None,
+    ) -> F:
+        task_name = name or func.__name__
+        retry = self._resolve_retry_policy(
+            max_retries, retry_backoff, base_delay, max_delay
+        )
+        self._registry[task_name] = _Registration(fn=func, retry=retry)
+        setattr(func, _NAME_ATTR, task_name)
+        return func
 
     def _resolve_retry_policy(
         self,
@@ -143,6 +159,66 @@ class Errand:
         if max_delay is not None:
             policy = replace(policy, max_delay=max_delay)
         return policy
+
+    def schedule(
+        self,
+        fn: F | None = None,
+        *,
+        cron: str | None = None,
+        interval_seconds: float | None = None,
+        at: datetime | None = None,
+        name: str | None = None,
+        max_retries: int | None = None,
+        retry_backoff: BackoffKind | None = None,
+        base_delay: float | None = None,
+        max_delay: float | None = None,
+    ) -> F | Callable[[F], F]:
+        """Register a task and a schedule that enqueues it automatically.
+
+        Exactly one of ``cron`` (a 5-field cron expression), ``interval_seconds``,
+        or ``at`` (a one-shot ``datetime``) must be given. Scheduled runs
+        are tracked exactly like any other enqueued job -- there's no
+        separate "scheduled job" state.
+
+        Example::
+
+            @tasks.schedule(cron="0 * * * *")     # hourly
+            async def hourly_cleanup() -> None: ...
+
+            @tasks.schedule(interval_seconds=30)  # every 30s
+            async def heartbeat() -> None: ...
+        """
+        if sum(x is not None for x in (cron, interval_seconds, at)) != 1:
+            raise ValueError(
+                "schedule() requires exactly one of cron, interval_seconds, or at"
+            )
+
+        def decorator(func: F) -> F:
+            registered = self._register_task(
+                func, name, max_retries, retry_backoff, base_delay, max_delay
+            )
+            task_name = name or func.__name__
+            enqueue = self._make_scheduled_enqueue(task_name)
+
+            if cron is not None:
+                self._scheduler.add_cron(task_name, cron, enqueue)
+            elif interval_seconds is not None:
+                self._scheduler.add_interval(task_name, interval_seconds, enqueue)
+            else:
+                assert at is not None
+                self._scheduler.add_at(task_name, at, enqueue)
+
+            return registered
+
+        if fn is not None:
+            return decorator(fn)
+        return decorator
+
+    def _make_scheduled_enqueue(self, task_name: str) -> Callable[[], None]:
+        def _enqueue() -> None:
+            self.enqueue(task_name)
+
+        return _enqueue
 
     def enqueue(self, fn: Callable[..., Any] | str, *args: Any, **kwargs: Any) -> Job:
         """Enqueue a registered task for background execution.
@@ -196,11 +272,16 @@ class Errand:
         return self._router
 
     async def startup(self) -> None:
-        """Start the worker pool. Call from your app's startup/lifespan."""
+        """Start the worker pool and scheduler.
+
+        Call from your app's startup/lifespan.
+        """
         await self._runner.start()
+        await self._scheduler.start()
 
     async def shutdown(self) -> None:
-        """Drain in-flight jobs (up to the configured timeout) and stop."""
+        """Stop the scheduler, then drain in-flight jobs up to the timeout."""
+        await self._scheduler.stop()
         await self._runner.stop(drain=True, timeout=self._shutdown_timeout)
 
     @asynccontextmanager
