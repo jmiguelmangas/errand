@@ -165,9 +165,10 @@ def log_retry(job: Job) -> None:
 
 Each decorator can be used multiple times; every registered hook fires, in
 registration order, with an immutable snapshot of the job as of that exact
-transition. Hooks may be sync or async — keep them fast, they run inline on
-the event loop, not in a thread. A hook that raises is logged and doesn't
-affect the job or any other hook.
+transition. Hooks may be sync or async and run as detached background
+tasks — a slow or hanging hook can never hold a worker slot or delay the
+next job. A hook that raises is logged and doesn't affect the job or any
+other hook.
 
 ## Using errand with sync frameworks (Flask, Django)
 
@@ -240,6 +241,15 @@ asyncio.run_coroutine_threadsafe(tasks.shutdown(), _loop).result()
 The core ships with `InMemoryJobStore`. The `JobStore` interface is the single
 seam for durability — a Redis or Postgres store can be added later as an
 optional extra without changing any task code.
+
+One thing that's specific to `InMemoryJobStore`, not a universal guarantee:
+`enqueue()` returns a job that's already visible via `get_job()`/`list_jobs()`
+with no polling needed, because it can create the record synchronously. A
+store that needs real I/O to persist (a future Redis/Postgres store) can't
+offer that without blocking the event loop, so it falls back to creating the
+record asynchronously — a moment of eventual consistency right after
+`enqueue()` for that store, same as before this was fixed for the in-memory
+case.
 
 `InMemoryJobStore` keeps every job record until the process exits or
 something prunes it — unbounded growth in a long-running process. For that

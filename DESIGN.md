@@ -274,10 +274,13 @@ each can be registered multiple times, and every registered hook fires, in
 registration order, for its matching transition. A hook may be sync or async
 and receives an immutable snapshot of the `Job` at the moment of the
 transition (a `dataclasses.replace()` copy — not the live object the runner
-keeps mutating). A hook that raises is logged and does not affect the job or
-any other hook. This is the thin observability layer described in
-`NEXT_STEPS.md`'s post-0.1.1 hardening plan — no new runtime dependency,
-`logging` is stdlib.
+keeps mutating). Hooks run as detached background tasks (`asyncio.create_task`,
+never awaited by the worker path) — a slow or hanging hook can't hold a
+worker slot or delay the next job or a scheduled retry; `shutdown()` gives
+outstanding hook tasks the same grace period used for draining jobs, then
+cancels whatever's left. A hook that raises is logged and does not affect
+the job or any other hook. This is a thin observability layer — no new
+runtime dependency, `logging` is stdlib.
 
 Composing with an existing lifespan (documented pattern):
 

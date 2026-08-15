@@ -176,6 +176,39 @@ async def test_hook_that_raises_does_not_break_job_or_other_hooks() -> None:
     assert order == ["broken", "fine"]
 
 
+async def test_slow_hook_does_not_block_worker_or_next_job() -> None:
+    # A single worker, and an on_success hook that hangs well past this
+    # test's patience. If hooks were awaited inline in the worker path,
+    # the second job would never get picked up.
+    tasks = Errand(max_workers=1, shutdown_timeout=0.1)
+    hook_started = asyncio.Event()
+
+    @tasks.on_success
+    async def slow_hook(job: Job) -> None:
+        hook_started.set()
+        await asyncio.sleep(10)
+
+    @tasks.task
+    def noop() -> None:
+        pass
+
+    await tasks.startup()
+    try:
+        first = tasks.enqueue(noop)
+        second = tasks.enqueue(noop)
+
+        finished_first = await _wait_for_terminal(tasks, first.id, timeout=2.0)
+        finished_second = await _wait_for_terminal(tasks, second.id, timeout=2.0)
+
+        assert finished_first.status == JobStatus.SUCCEEDED
+        assert finished_second.status == JobStatus.SUCCEEDED
+        assert hook_started.is_set()
+    finally:
+        # Also proves shutdown() doesn't hang waiting on the permanently
+        # stuck hook -- it's cancelled once shutdown_timeout is up.
+        await tasks.shutdown()
+
+
 async def test_on_failure_fires_for_job_cancelled_during_shutdown() -> None:
     tasks = Errand(shutdown_timeout=0.05)
     seen: list[Job] = []
