@@ -239,6 +239,12 @@ class Errand:
 
     # inspection
     async def get_job(self, job_id: str) -> Job | None: ...
+    async def list_jobs(self, *, status=None, limit=50, offset=0) -> list[Job]: ...
+
+    # lifecycle hooks -- each fires with an immutable snapshot of the job
+    def on_success(self, fn: Callable[[Job], Any]) -> Callable[[Job], Any]: ...
+    def on_failure(self, fn: Callable[[Job], Any]) -> Callable[[Job], Any]: ...
+    def on_retry(self, fn: Callable[[Job], Any]) -> Callable[[Job], Any]: ...
 
     # FastAPI integration
     @property
@@ -252,6 +258,16 @@ class Errand:
 `task` and `schedule` work both bare (`@tasks.task`) and parameterised
 (`@tasks.task(max_retries=3)`). `enqueue` accepts either the decorated function
 or its registered name.
+
+`on_success`/`on_failure`/`on_retry` are bare decorators (`@tasks.on_success`);
+each can be registered multiple times, and every registered hook fires, in
+registration order, for its matching transition. A hook may be sync or async
+and receives an immutable snapshot of the `Job` at the moment of the
+transition (a `dataclasses.replace()` copy — not the live object the runner
+keeps mutating). A hook that raises is logged and does not affect the job or
+any other hook. This is the thin observability layer described in
+`NEXT_STEPS.md`'s post-0.1.1 hardening plan — no new runtime dependency,
+`logging` is stdlib.
 
 Composing with an existing lifespan (documented pattern):
 
