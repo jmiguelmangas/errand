@@ -132,7 +132,8 @@ optional extra without changing any task code.
 ## Roadmap
 
 See [`TASKS.md`](./TASKS.md). Contributor and architecture notes live in
-[`DESIGN.md`](./DESIGN.md) and [`CLAUDE.md`](./CLAUDE.md).
+[`DESIGN.md`](./DESIGN.md) and [`CLAUDE.md`](./CLAUDE.md). Release notes are
+in [`CHANGELOG.md`](./CHANGELOG.md).
 
 ## License
 
