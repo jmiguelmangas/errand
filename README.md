@@ -17,8 +17,12 @@ engine still runs anywhere. Because FastAPI is user-supplied and only its most
 stable public surface is touched (`APIRouter`, the `.dependency` attribute on
 `Depends`), a FastAPI release won't leave `errand` stranded.
 
-> **Before first publish:** confirm the `errand` name is still free on PyPI and
-> register it. Only `errand-boy` (an abandoned 2014 project) exists today.
+> **Status: 0.1.0, feature-complete.** Job store, worker pool, status
+> router, retries with backoff, dependency injection, and scheduling are
+> all implemented, tested (100% coverage), and merged — see
+> [`CHANGELOG.md`](./CHANGELOG.md). **Not yet published to PyPI.** Before
+> first publish, confirm the `errand` name is still free (only
+> `errand-boy`, an abandoned 2014 project, exists today) and register it.
 
 ## Why
 
@@ -204,9 +208,16 @@ optional extra without changing any task code.
 
 ## Roadmap
 
-See [`TASKS.md`](./TASKS.md). Contributor and architecture notes live in
-[`DESIGN.md`](./DESIGN.md) and [`CLAUDE.md`](./CLAUDE.md). Release notes are
-in [`CHANGELOG.md`](./CHANGELOG.md).
+All of [`TASKS.md`](./TASKS.md)'s milestones (M0–M7) are implemented,
+tested, and merged — this is a complete 0.1.0, not a work in progress.
+`TASKS.md` is kept as the historical build plan; contributor and
+architecture notes live in [`DESIGN.md`](./DESIGN.md) and
+[`CLAUDE.md`](./CLAUDE.md); release notes are in
+[`CHANGELOG.md`](./CHANGELOG.md).
+
+Explicitly deferred past 0.1.0 (called out as such in `DESIGN.md`): a
+durable `JobStore` (Redis/Postgres — the interface is already the seam for
+it), remote enqueue/cancel over HTTP, and jitter on retry backoff.
 
 ## License
 
